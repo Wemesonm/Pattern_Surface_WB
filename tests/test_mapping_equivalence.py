@@ -21,8 +21,48 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_map_has_generic_and_legacy_metadata(self):
         source = ENGINE.read_text(encoding="utf-8")
-        for property_name in ("WrapCarrierChunks", "MapPayloadChunks", "MapAlgorithm"):
+        for property_name in (
+                "WrapCarrierChunks", "MapPayloadChunks", "MapAlgorithm",
+                "MapColumnWidth", "MapRowHeight", "MapGridOrigin",
+                "MapClosureTolerance", "MapCompatible",
+                "MapIncompatibleCount", "MapCompatibilityReport"):
             self.assertIn(property_name, source)
+
+    def test_map_grid_dialog_contract(self):
+        # MAP-REQ-010: independent persisted grid dimensions and tolerance.
+        from pattern_surface.mapping import parameters
+
+        self.assertAlmostEqual(13.85640646055102, parameters.DEFAULT_COLUMN_WIDTH)
+        self.assertEqual(12.0, parameters.DEFAULT_ROW_HEIGHT)
+        self.assertEqual(0.05, parameters.DEFAULT_CLOSURE_TOLERANCE)
+        self.assertIn("ColumnWidth", parameters.COLUMN_WIDTH_KEY)
+        self.assertIn("RowHeight", parameters.ROW_HEIGHT_KEY)
+        self.assertIn("ClosureTolerance", parameters.CLOSURE_TOLERANCE_KEY)
+
+    def test_generic_grid_uses_independent_centered_axes(self):
+        # MAP-REQ-023, MAP-REQ-024, MAP-REQ-025.
+        from pattern_surface.compatibility import v4_pipeline as engine
+
+        self.assertEqual([-5.0, 5.0], engine.grid_line_values(-6.0, 8.0, 5.0, 10.0))
+        self.assertEqual([-3.0, 3.0, 9.0], engine.grid_line_values(-4.0, 10.0, 3.0, 6.0))
+
+    def test_face_positioning_does_not_snap_to_pattern_grid(self):
+        # MAP-REQ-026: grid phase must not move the physical carrier.
+        source = ENGINE.read_text(encoding="utf-8")
+        position_start = source.index("def position_components")
+        position_end = source.index("def atlas_seam_pairs", position_start)
+        self.assertNotIn("snap_lower_curved_strips_to_grid(group)",
+                         source[position_start:position_end])
+
+    def test_invalid_grid_dimensions_are_rejected(self):
+        # MAP-REQ-010: public callers receive the same positive-length guard.
+        from pattern_surface.compatibility import v4_pipeline as engine
+
+        for values in ((0.0, 12.0, 0.05), (10.0, -1.0, 0.05),
+                       (10.0, 12.0, float("inf"))):
+            with self.subTest(values=values):
+                with self.assertRaises(RuntimeError):
+                    engine.validate_map_grid(*values)
 
     def test_periodic_seam_parameters_stay_in_trimmed_intervals(self):
         from pattern_surface.compatibility import v4_pipeline as engine

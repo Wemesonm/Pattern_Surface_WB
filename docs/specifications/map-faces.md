@@ -13,8 +13,10 @@ lattices, pyramid relief, or physical trimming.
 
 ## Approved Baseline
 
-`44b8f19` is the best approved Map Faces checkpoint (`0.1.2`). The reference
-fixture is `tests/fixtures/container_four_faces.FCStd`.
+Map Faces `0.1.4` (commit message `checkpoint: best approved Map Faces generic
+grid 0.1.4`) is the current approved checkpoint. `44b8f19` remains the previous
+approved checkpoint (`0.1.2`). The reference fixture is
+`tests/fixtures/container_four_faces.FCStd`.
 
 Baseline evidence:
 
@@ -65,7 +67,7 @@ or called by a modular file.
 
 ## User Interface
 
-`MAP-REQ-010` **Specified** - Before creating a map, show a modal dialog with:
+`MAP-REQ-010` **Implemented in 0.1.4** - Before creating a map, show a modal dialog with:
 
 - `Column width`, default `13.856 mm`;
 - `Row height`, default `12.000 mm`;
@@ -75,7 +77,7 @@ All values use millimeters, a minimum of `0.010 mm`, and three decimals. Save
 confirmed values in FreeCAD preferences. Cancel must not create or alter objects
 or preferences.
 
-`MAP-REQ-011` **Specified** - Grid orientation remains automatic and follows the
+`MAP-REQ-011` **Implemented in 0.1.4** - Grid orientation remains automatic and follows the
 geometric atlas orientation. The dialog provides no rotation control.
 
 ## Algorithm and Data Flow
@@ -100,23 +102,23 @@ neighbors, prioritize the orientation of the already positioned seam. A mostly
 horizontal placed seam carries transverse grid phase. Curved seam fitting may
 scale only the seam tangent direction; the perpendicular scale remains `1.0`.
 
-`MAP-REQ-022` **Specified** - The physical carrier remains a triangulated,
+`MAP-REQ-022` **Implemented in 0.1.4** - The physical carrier remains a triangulated,
 invisible interpolation structure. Its triangles transport logical coordinates,
 physical points, normals, UV values, and face ownership; they are not pattern
 cells and do not define the visible grid.
 
-`MAP-REQ-023` **Specified** - The visible map grid is orthogonal. Vertical lines
+`MAP-REQ-023` **Implemented in 0.1.4** - The visible map grid is orthogonal. Vertical lines
 use `Column width`; horizontal lines use `Row height`. Rows never receive an
 alternating half-column offset.
 
-`MAP-REQ-024` **Specified** - Column width and row height are independent. Map
+`MAP-REQ-024` **Implemented in 0.1.4** - Column width and row height are independent. Map
 Faces must not derive either value from an equilateral-triangle formula.
 
-`MAP-REQ-025` **Specified** - Grid phase is centered on the selected connected
+`MAP-REQ-025` **Implemented in 0.1.4** - Grid phase is centered on the selected connected
 component. The phase origin is stored separately and must not translate, rotate,
 scale, or otherwise modify the physical carrier.
 
-`MAP-REQ-026` **Specified** - Remove Map Faces dependencies on Diamond constants
+`MAP-REQ-026` **Implemented in 0.1.4** - Remove Map Faces dependencies on Diamond constants
 and limits. Characterize `snap_lower_curved_strips_to_grid()` before changing it;
 if its effect is required by the approved baseline, replace its pattern-size
 dependency with a topology- and seam-based rule.

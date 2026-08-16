@@ -85,6 +85,17 @@ mapped_payload = engine.load_chunks(mapped, "WrapCarrierChunks")
 assert_equal(len(mapped_payload["faces"]), 4, "mapped face count")
 assert_equal(mapped_payload["adjacency"], baseline_payload["adjacency"], "adjacency")
 assert hasattr(mapped, "MapPayloadChunks")
+assert abs(float(mapped.MapColumnWidth) - engine.DEFAULT_MAP_COLUMN_WIDTH) < 1.0e-9
+assert abs(float(mapped.MapRowHeight) - engine.DEFAULT_MAP_ROW_HEIGHT) < 1.0e-9
+assert abs(float(mapped.MapClosureTolerance) - engine.DEFAULT_MAP_CLOSURE_TOLERANCE) < 1.0e-9
+assert_equal(mapped_payload["grid"]["origin"],
+             [float(mapped.MapGridOrigin.x), float(mapped.MapGridOrigin.y)],
+             "map grid origin")
+assert mapped_payload["carrier_triangles"] == mapped_payload["triangles"]
+assert_equal(mapped_payload["grid_side"], mapped_payload["grid"]["column_width"],
+             "legacy column alias")
+assert_equal(mapped_payload["grid_height"], mapped_payload["grid"]["row_height"],
+             "legacy row alias")
 face14 = next(record for record in mapped_payload["faces"] if record["sub"] == "Face14")
 assert abs(face14["height"] - 11.938052083641217) < 0.01
 assert len(mapped_payload["triangles"]) == 2642

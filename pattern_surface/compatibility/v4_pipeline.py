@@ -19,9 +19,12 @@ SCHEMA = "WRAP_CARRIER_V4"
 WRAP_PREFIX = "DiamondSurfaceWrap_V4"
 FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
 CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
-BUILD_ID = "Pattern_Surface_WB_0.1.2_map_multiseam_alignment_2026-08-16"
+BUILD_ID = "Pattern_Surface_WB_0.1.4_map_generic_grid_candidate_2026-08-16"
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
+DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
+DEFAULT_MAP_ROW_HEIGHT = GRID_HEIGHT
+DEFAULT_MAP_CLOSURE_TOLERANCE = 0.05
 DEFAULT_PATTERN_HEIGHT = 1.0
 CONTACT = 0.005
 MAX_EDGE = 1.5
@@ -99,6 +102,30 @@ def add_string(obj, name, value, group):
     if name not in obj.PropertiesList:
         obj.addProperty("App::PropertyString", name, group)
     setattr(obj, name, str(value))
+
+
+def add_bool(obj, name, value, group):
+    if name not in obj.PropertiesList:
+        obj.addProperty("App::PropertyBool", name, group)
+    setattr(obj, name, bool(value))
+
+
+def add_integer(obj, name, value, group):
+    if name not in obj.PropertiesList:
+        obj.addProperty("App::PropertyInteger", name, group)
+    setattr(obj, name, int(value))
+
+
+def add_string_list(obj, name, value, group):
+    if name not in obj.PropertiesList:
+        obj.addProperty("App::PropertyStringList", name, group)
+    setattr(obj, name, [str(item) for item in value])
+
+
+def add_vector(obj, name, value, group):
+    if name not in obj.PropertiesList:
+        obj.addProperty("App::PropertyVector", name, group)
+    setattr(obj, name, App.Vector(float(value[0]), float(value[1]), 0.0))
 
 
 def add_length(obj, name, value, group):
@@ -814,14 +841,14 @@ def position_components(entries, graph):
         for entry in group:
             entry["transform"][4] += shift_x
             entry["transform"][5] += shift_y
-        snap_lower_curved_strips_to_grid(group)
+        # Grid phase is preview metadata. It must never move carrier faces.
         xs = [value + shift_x for value in xs]
         if group:
             xs = []
             for entry in group:
                 bounds = transformed_entry_bounds(entry)
                 xs.extend([bounds[0], bounds[1]])
-        x_offset = max(xs) + GRID_SIDE * 2.0
+        x_offset = max(xs) + MAX_EDGE * 2.0
     return groups
 
 
@@ -1463,15 +1490,40 @@ def line_triangle_points(triangle, value, vertical):
     return unique[0], unique[-1]
 
 
-def carrier_preview(triangles, bounds):
+def grid_line_values(lower, upper, origin, step):
+    first = origin + math.ceil((lower - origin) / step - 1.0e-9) * step
+    values = []
+    current = first
+    while current <= upper + 1.0e-8:
+        values.append(current)
+        current += step
+    return values
+
+
+def validate_map_grid(column_width, row_height, closure_tolerance):
+    values = {
+        "Column width": column_width,
+        "Row height": row_height,
+        "Closure tolerance": closure_tolerance,
+    }
+    for label, value in values.items():
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            fail("{} must be a finite positive length.".format(label))
+        if not math.isfinite(value) or value <= 0.0:
+            fail("{} must be a finite positive length.".format(label))
+
+
+def carrier_preview(triangles, bounds, column_width=DEFAULT_MAP_COLUMN_WIDTH,
+                    row_height=DEFAULT_MAP_ROW_HEIGHT, origin=None):
     edges = []
-    step = GRID_HEIGHT
     x0, x1, y0, y1 = bounds
-    for vertical in (True, False):
-        first = math.ceil((x0 if vertical else y0) / step - 1.0e-9) * step
-        last = x1 if vertical else y1
-        value = first
-        while value <= last + 1.0e-8:
+    origin = list(origin or [(x0 + x1) * 0.5, (y0 + y1) * 0.5])
+    for vertical, lower, upper, phase, step in (
+            (True, x0, x1, origin[0], float(column_width)),
+            (False, y0, y1, origin[1], float(row_height))):
+        for value in grid_line_values(lower, upper, phase, step):
             for triangle in triangles:
                 segment = line_triangle_points(triangle, value, vertical)
                 if segment is None:
@@ -1482,7 +1534,6 @@ def carrier_preview(triangles, bounds):
                     length = points[0].distanceToPoint(points[1])
                     if length > 1.0e-7:
                         edges.append(Part.makePolygon(points))
-            value += step
     return Part.makeCompound(edges) if edges else Part.Shape()
 
 
@@ -1497,10 +1548,13 @@ def entry_record(entry):
             "component": entry["component"]}
 
 
-def create_wrap():
+def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
+                row_height=DEFAULT_MAP_ROW_HEIGHT,
+                closure_tolerance=DEFAULT_MAP_CLOSURE_TOLERANCE):
     doc = App.ActiveDocument
     if doc is None:
         fail("Abra um documento antes de executar Wrap Faces V4.")
+    validate_map_grid(column_width, row_height, closure_tolerance)
     console("wrap_v4: build={} file={}".format(BUILD_ID, __file__))
     entries = selected_faces()
     for entry in entries:
@@ -1524,13 +1578,25 @@ def create_wrap():
     xs = [vertex["q"][0] for tri in triangles for vertex in tri["v"]]
     ys = [vertex["q"][1] for tri in triangles for vertex in tri["v"]]
     bounds = [min(xs), max(xs), min(ys), max(ys)]
-    payload = {"schema": SCHEMA, "version": 1, "grid_height": GRID_HEIGHT,
-               "grid_side": GRID_SIDE, "max_edge": MAX_EDGE, "sag": SAG,
+    grid_origin = [(bounds[0] + bounds[1]) * 0.5,
+                   (bounds[2] + bounds[3]) * 0.5]
+    grid = {"column_width": float(column_width),
+            "row_height": float(row_height),
+            "origin": grid_origin,
+            "closure_tolerance": float(closure_tolerance)}
+    compatibility = {"status": "not_evaluated", "segments": [],
+                     "cycles": [], "arcs": []}
+    payload = {"schema": SCHEMA, "version": 1,
+               "grid_height": float(row_height),
+               "grid_side": float(column_width),
+               "grid": grid, "max_edge": MAX_EDGE, "sag": SAG,
                "bounds": bounds, "faces": [entry_record(item) for item in entries],
-               "triangles": triangles, "external_segments": boundary, "adjacency": shared,
+               "triangles": triangles, "carrier_triangles": triangles,
+               "external_segments": boundary, "adjacency": shared,
                "periodic_seams": [list(pair) for pair in sorted(seam_pairs)],
                "periodic_adjustments": periodic_records,
-               "components": [[item["index"] for item in group] for group in groups]}
+               "components": [[item["index"] for item in group] for group in groups],
+               "compatibility": compatibility}
     name = next_name(doc, WRAP_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = name
@@ -1544,11 +1610,20 @@ def create_wrap():
     add_string(run, "MapVersion", "1", "Pattern Surface")
     add_string(run, "MapAlgorithm", SCHEMA, "Pattern Surface")
     add_string(run, "MapReady", "True", "Pattern Surface")
+    add_length(run, "MapColumnWidth", column_width, "Pattern Surface")
+    add_length(run, "MapRowHeight", row_height, "Pattern Surface")
+    add_vector(run, "MapGridOrigin", grid_origin, "Pattern Surface")
+    add_length(run, "MapClosureTolerance", closure_tolerance, "Pattern Surface")
+    add_bool(run, "MapCompatible", True, "Pattern Surface")
+    add_integer(run, "MapIncompatibleCount", 0, "Pattern Surface")
+    add_string_list(run, "MapCompatibilityReport", [], "Pattern Surface")
     add_chunks(run, "MapPayloadChunks", payload, "Pattern Surface")
     preview = doc.addObject("PartDesign::Feature", name + "_CarrierGrid")
     preview.Label = name + " Carrier Grid"
-    preview.Shape = carrier_preview(triangles, bounds)
+    preview.Shape = carrier_preview(
+        triangles, bounds, column_width, row_height, grid_origin)
     add_string(preview, "WrapParentRun", run.Name, "Wrap Faces V4")
+    add_string(preview, "MapParentRun", run.Name, "Pattern Surface")
     view = getattr(preview, "ViewObject", None)
     if view is not None:
         view.LineColor = (0.0, 0.8, 1.0)

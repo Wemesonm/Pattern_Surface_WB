@@ -64,9 +64,11 @@ When a change crosses tool boundaries, read every affected specification.
 
 ## Approved Baselines
 
-- `44b8f19` is the best approved Map Faces baseline (`0.1.2`). It fixes periodic
-  parameter unwrapping and transverse alignment across a curved face with two
-  already positioned neighbors.
+- Map Faces `0.1.4` (commit message `checkpoint: best approved Map Faces generic
+  grid 0.1.4`) is the current approved baseline. It preserves the periodic
+  unwrapping and transverse alignment from `44b8f19`, completes the lower row,
+  and adds the independent, component-centered orthogonal grid.
+- `44b8f19` remains the previous approved Map Faces baseline (`0.1.2`).
 - `ada0549` is the approved Diamond dimension-dialog baseline (`0.1.3`).
 - The four-face fixture baseline is 2,642 physical carrier triangles, 68 Diamond
   solids, two rejected external cells, and 68 physically trimmed solids.
