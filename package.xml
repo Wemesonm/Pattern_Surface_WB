@@ -2,7 +2,7 @@
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>Pattern_Surface_WB</name>
   <description>Map adjacent faces, apply registered surface patterns, and trim the results.</description>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <date>2026-08-16</date>
   <author>Wemeson Araujo</author>
   <maintainer>Wemeson Araujo</maintainer>
@@ -13,7 +13,7 @@
       <name>Pattern_Surface_WB</name>
       <classname>PatternSurfaceWorkbench</classname>
       <description>Surface mapping and modular pattern tools.</description>
-      <version>0.1.0</version>
+      <version>0.1.1</version>
       <subdirectory>./</subdirectory>
       <icon>pattern_surface/resources/icons/workbench.svg</icon>
       <freecadmin>1.0</freecadmin>

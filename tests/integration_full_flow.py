@@ -83,10 +83,11 @@ select_faces(doc, source)
 mapped = engine.create_wrap()
 mapped_payload = engine.load_chunks(mapped, "WrapCarrierChunks")
 assert_equal(len(mapped_payload["faces"]), 4, "mapped face count")
-assert_equal(len(mapped_payload["triangles"]), len(baseline_payload["triangles"]),
-             "carrier triangle count")
 assert_equal(mapped_payload["adjacency"], baseline_payload["adjacency"], "adjacency")
 assert hasattr(mapped, "MapPayloadChunks")
+face14 = next(record for record in mapped_payload["faces"] if record["sub"] == "Face14")
+assert abs(face14["height"] - 11.938052083641217) < 0.01
+assert len(mapped_payload["triangles"]) == 2642
 
 patterns = []
 cell_ids = None

@@ -151,13 +151,13 @@ Every original core function is listed below. `Facade` means the implementation 
 | `v3`, `xyz`, `norm`, `is_valid_shape`, `qkey2`, `qkey3` | Vector/shape primitives and quantization | `common/geometry.py`; mapping, patterns, trim | Facade; imports and geometry integration. |
 | `add_string`, `add_chunks`, `load_chunks`, `next_name` | Properties and compressed JSON | `common/properties.py`, `common/serialization.py` | Facade; mapping/diamond/trim equivalence. |
 | `outer_edges`, `endpoints`, `same_edge`, `shared_edge`, `selected_faces`, `source_solid` | Selection and topological edge identity | `common/selection.py`, `mapping/adjacency.py` | Facade; mapping equivalence. |
-| `parameter_range`, `face_center`, `axis_length_table`, `interp`, `edge_fraction`, `local_xy_raw`, `local_xy`, `local_uv`, `apply_transform`, `invert_transform`, `point_from_logical` | Surface parameterization and logical atlas conversion | `mapping/parameterization.py` | Facade; known periodic defect remains open. |
+| `parameter_range`, `face_center`, `axis_length_table`, `interp`, `edge_fraction`, `local_xy_raw`, `local_xy`, `local_uv`, `apply_transform`, `invert_transform`, `point_from_logical` | Surface parameterization and logical atlas conversion | `mapping/parameterization.py` | Facade; periodic seam regression fixed in 0.1.1. |
 | `outward`, `tangent`, `orient_entry`, `signed_normal_at`, `edge_midpoint`, `align_connected_normals` | Local axes and consistent normals | `mapping/orientation.py` | Facade; mapping integration. |
 | `edge_samples`, `apply_matrix`, `aligned_edge_samples`, `seam_limit`, `neighbor_transform_candidates`, `seam_matrix_error`, `fit_neighbor_to_constraints`, `fit_neighbor` | Pairwise seam fitting | `mapping/seams.py` | Facade; seam visual protocol. |
 | `build_graph`, `components` | Adjacency graph and connected components | `mapping/adjacency.py` | Facade; must support N adjacent faces. |
 | `transformed_entry_bounds`, `snap_lower_curved_strips_to_grid`, `position_components`, `atlas_seam_pairs`, `edge_direction_matches`, `add_logical_seam_overrides`, `seam_override` | Component placement and logical seam rules | `mapping/seams.py` | Facade; mapping equivalence. |
 | `mapped_vertex`, `split_carrier_triangle`, `tessellated_carrier`, `entry_contains_logical`, `regular_curved_carrier`, `midpoint_vertex`, `weld_logical_nodes`, `refine_conforming_round`, `conforming_carrier` | Physical carrier construction | `mapping/carrier.py` | Facade; carrier counts and visual comparison. |
-| `validate_logical_seams`, `triangle_edge_key`, `third_point_2d`, `cycle_seam_pairs`, `rotate_component`, `close_periodic_component`, `unfold_carrier` | Seam validation and periodic closure | `mapping/seams.py` and carrier internals | Facade; periodic regression tests pending. |
+| `validate_logical_seams`, `triangle_edge_key`, `third_point_2d`, `cycle_seam_pairs`, `rotate_component`, `close_periodic_component`, `unfold_carrier` | Seam validation and periodic closure | `mapping/seams.py` and carrier internals | Facade; periodic interval regression covered, broader cycle cases pending. |
 | `point_on_edge`, `external_segments` | External boundary extraction | `mapping/carrier.py` | Facade; preview and Diamond boundary tests. |
 | `area2`, `logical_bounds`, `expand_bounds`, `bounds_overlap`, `carrier_bounds`, `component_logical_bounds` | 2D bounds helpers | `common/geometry.py`, carrier and Diamond | Facade; static and integration tests. |
 | `line_triangle_points`, `carrier_preview` | Preview isolines | `mapping/preview.py` | Facade; screenshot protocol. |
@@ -188,7 +188,7 @@ New helpers `add_length` and `length_value` belong to `common/properties.py`; th
 - Never base behavior on a hard-coded face number, screen direction, global X/Y/Z, or the current four-face fixture.
 - Preserve pcurves and the native trimmed parameter interval of each face.
 
-## Known Mapping Defect: Periodic Faces
+## Periodic Face Mapping Regression
 
 The current fixture exposes one bad lower-left face. Investigation found:
 
@@ -197,15 +197,18 @@ The current fixture exposes one bad lower-left face. Investigation found:
 - `Face4` is cylindrical with native U approximately `3*pi/2 .. 2*pi`, while V4 also derives `0 .. 2*pi`.
 - The physical shared edge between `Face14` and `Face8` is about `11.938052 mm`, but the logical atlas maps the Face14 side to about `35.7998 mm`.
 
-This explains the displaced/duplicated preview lines: trimmed periodic surfaces are being expanded to the full underlying surface domain. Curves WB's Sketch on Surface and Map on Face implementations demonstrate useful techniques: use edge pcurves, native `ParameterRange`, seam-aware parameter unwrapping, and explicit orientation of periodic domains.
+This explained the displaced/duplicated preview lines: trimmed periodic surfaces were being expanded to the full underlying surface domain. Curves WB's Sketch on Surface and Map on Face implementations demonstrated the relevant technique: seam-aware parameter unwrapping around the trimmed `ParameterRange`.
 
-Future isolated experiments, in order:
+Resolved in 0.1.1 by `surface_period()`, `unwrap_parameter()`, and `surface_parameters()`. Every periodic U/V value returned by the support surface is shifted by an integer number of periods to the representation nearest the center of the trimmed face interval. The same normalization is used while deriving the parameter range and while converting physical points to logical coordinates. Using `face.ParameterRange` alone is not sufficient because later calls to `Surface.parameter(point)` can still return the equivalent value on the opposite side of the seam.
 
-1. Make `parameter_range()` trust the trimmed face's native `ParameterRange`.
-2. Build boundary logical coordinates from edge pcurves instead of projecting sampled 3D points back onto the infinite support surface.
-3. Unwrap periodic U/V values relative to the shared pcurve and neighbor interval.
-4. Score the finite orientation candidates by full shared-edge residual, endpoints, tangent direction, and interval length.
-5. Add a cycle-closure optimization only after pairwise seams are correct.
+Regression fixture result: `Face14` logical curved length changed from the incorrect `35.7998 mm` to `11.9378 mm`, carrier triangles changed from 2,615 to 2,642, Diamond creates 68 solids with two rejected external cells, and physical trim creates 68 solids.
+
+Related future isolated experiments, if another periodic topology fails:
+
+1. Build boundary logical coordinates directly from edge pcurves.
+2. Unwrap periodic U/V values relative to the shared pcurve when the trimmed interval spans more than half a period.
+3. Score orientation candidates by full shared-edge residual, endpoints, tangent direction, and interval length.
+4. Add a cycle-closure optimization only after pairwise seams are correct.
 
 Each experiment gets its own checkpoint and visual verdict. Do not combine them.
 
@@ -268,7 +271,7 @@ The link target is normally `~/Library/Application Support/FreeCAD/v1-1/Mod/Patt
 - Original V3/V4 archives and fixture: present.
 - Modular namespaces: present as transitional facades.
 - V4 explicit height and generic metadata: adapted and automated checks passing.
-- Physical integration on the four-face fixture: passing with 2,615 carrier triangles, 64 solids at each tested height, and 64 physically trimmed solids.
+- Physical integration on the four-face fixture: passing with 2,642 carrier triangles, 68 solids at each tested height, and 68 physically trimmed solids.
 - Interactive toolbar registration: validated after FreeCAD restart; all three tools and the Diamond group command are present.
-- Visual equivalence of the known defective lower-left face is intentionally unchanged from the V4 baseline.
-- Periodic face correction: intentionally pending until the structural baseline is accepted.
+- The lower-left periodic face regression is corrected and covered by normalized-interval and full-flow tests.
+- Periodic interval unwrapping: validated in 0.1.1; broader periodic cycle fixtures remain future work.

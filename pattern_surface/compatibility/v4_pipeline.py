@@ -206,13 +206,40 @@ def source_solid(entry):
     return shape
 
 
+def surface_period(surface, axis):
+    periodic = getattr(surface, "is{}Periodic".format(axis.upper()), None)
+    try:
+        if not periodic or not periodic():
+            return None
+        value = getattr(surface, "{}Period".format(axis.upper()))
+        return float(value() if callable(value) else value)
+    except Exception:
+        return None
+
+
+def unwrap_parameter(value, lower, upper, period):
+    if period is None or period <= 1.0e-12:
+        return value
+    center = (lower + upper) * 0.5
+    return value + round((center - value) / period) * period
+
+
+def surface_parameters(face, point, bounds=None):
+    u, v = face.Surface.parameter(point)
+    u0, u1, v0, v1 = bounds or face.ParameterRange
+    u = unwrap_parameter(u, u0, u1, surface_period(face.Surface, "u"))
+    v = unwrap_parameter(v, v0, v1, surface_period(face.Surface, "v"))
+    return u, v
+
+
 def parameter_range(face):
+    native = list(face.ParameterRange)
     values = []
     for edge in outer_edges(face):
         length = max(float(getattr(edge, "Length", 0.0)), 0.01)
         for point in edge.discretize(Number=max(3, int(math.ceil(length / MAX_EDGE)) + 1)):
             try:
-                values.append(face.Surface.parameter(point))
+                values.append(surface_parameters(face, point, native))
             except Exception:
                 pass
     if values:
@@ -365,8 +392,8 @@ def edge_fraction(edge, point):
 
 def local_xy_raw(entry, point):
     face = entry["face"]
-    u, v = face.Surface.parameter(point)
     u0, u1, v0, v1 = entry["range"]
+    u, v = surface_parameters(face, point, entry["range"])
     ru = interp(entry["metric_u"], (u - u0) / (u1 - u0))
     rv = interp(entry["metric_v"], (v - v0) / (v1 - v0))
     values = {"u": ru, "v": rv}
