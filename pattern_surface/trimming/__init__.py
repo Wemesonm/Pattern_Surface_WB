@@ -1,0 +1,1 @@
+"""Generic pattern trimming subsystem."""

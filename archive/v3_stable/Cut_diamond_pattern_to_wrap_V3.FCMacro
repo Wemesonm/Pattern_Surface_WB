@@ -1,0 +1,14 @@
+import os
+import sys
+import importlib
+import FreeCAD as App
+
+macro_dir = os.path.dirname(__file__) if "__file__" in globals() else App.getUserMacroDir()
+if macro_dir not in sys.path:
+    sys.path.insert(0, macro_dir)
+
+import Wrap_pipeline_V3_core
+Wrap_pipeline_V3_core = importlib.reload(Wrap_pipeline_V3_core)
+from Wrap_pipeline_V3_core import create_cut, run_guard
+
+run_guard(create_cut, "Cut Diamond Pattern To Wrap V3")

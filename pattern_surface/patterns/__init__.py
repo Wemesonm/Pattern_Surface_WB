@@ -1,0 +1,1 @@
+"""Pattern registry and implementations."""
