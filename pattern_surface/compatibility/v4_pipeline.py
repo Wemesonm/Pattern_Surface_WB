@@ -19,7 +19,7 @@ SCHEMA = "WRAP_CARRIER_V4"
 WRAP_PREFIX = "DiamondSurfaceWrap_V4"
 FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
 CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
-BUILD_ID = "V4_macro_folder_check_2026-08-15_1508"
+BUILD_ID = "Pattern_Surface_WB_0.1.2_map_multiseam_alignment_2026-08-16"
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
 DEFAULT_PATTERN_HEIGHT = 1.0
@@ -499,19 +499,25 @@ def neighbor_transform_candidates(placed, target, placed_edge, target_edge):
     metric_error = abs(sl - dl) / max(sl, dl)
     if metric_error > 0.05 and not curved_seam:
         return []
-    scale = 1.0
+    tangent_scale = dl / sl if curved_seam else 1.0
     if curved_seam and abs(dl - sl) > 0.05:
-        console("wrap_v4: emenda_curva_sem_escala {} <-> {} sl={:.4f} dl={:.4f}".format(
-            placed["sub"], target["sub"], sl, dl))
-    cs = (sx * dx + sy * dy) / (sl * dl)
-    sn = (sx * dy - sy * dx) / (sl * dl)
-    direct = [scale * cs, -scale * sn, scale * sn, scale * cs]
-    # Reflection written in the source/destination edge bases.  Reusing the
-    # rotation coefficients here only works when the source edge is horizontal.
+        console("wrap_v4: emenda_curva_escala_tangencial {} <-> {} sl={:.4f} dl={:.4f} escala={:.6f}".format(
+            placed["sub"], target["sub"], sl, dl, tangent_scale))
+    # Map the target seam basis onto the placed seam basis.  Curved strips can
+    # have a different logical length when their metric is sampled away from
+    # the shared boundary (for example, a toroidal fillet with changing
+    # radius).  Scale only along the seam; preserving the perpendicular basis
+    # keeps an already aligned side seam unchanged.
     sux, suy = sx / sl, sy / sl
     dux, duy = dx / dl, dy / dl
-    reflected = [scale * (dux * sux - duy * suy), scale * (dux * suy + duy * sux),
-                 scale * (duy * sux + dux * suy), scale * (duy * suy - dux * sux)]
+    direct = [tangent_scale * dux * sux + duy * suy,
+              tangent_scale * dux * suy - duy * sux,
+              tangent_scale * duy * sux - dux * suy,
+              tangent_scale * duy * suy + dux * sux]
+    reflected = [tangent_scale * dux * sux - duy * suy,
+                 tangent_scale * dux * suy + duy * sux,
+                 tangent_scale * duy * sux + dux * suy,
+                 tangent_scale * duy * suy - dux * sux]
     candidates = []
     placed_center = apply_transform(placed, [placed["width"] * 0.5, placed["height"] * 0.5])
     for linear in (direct, reflected):
@@ -756,8 +762,8 @@ def position_components(entries, graph):
                     dx = abs(q1[0] - q0[0])
                     dy = abs(q1[1] - q0[1])
                     return (
-                        0 if target_dx >= target_dy else 1,
                         0 if dx >= dy else 1,
+                        0 if target_dx >= target_dy else 1,
                         0 if isinstance(placed["face"].Surface, Part.Plane) else 1,
                         -float(getattr(placed_edge, "Length", 0.0)),
                         -float(placed["face"].Area),

@@ -203,6 +203,14 @@ Resolved in 0.1.1 by `surface_period()`, `unwrap_parameter()`, and `surface_para
 
 Regression fixture result: `Face14` logical curved length changed from the incorrect `35.7998 mm` to `11.9378 mm`, carrier triangles changed from 2,615 to 2,642, Diamond creates 68 solids with two rejected external cells, and physical trim creates 68 solids.
 
+## Multi-Seam Grid Alignment Regression
+
+After the periodic interval fix, the lower-left curved face had its complete lower boundary but its transverse grid lines did not meet those of the upper face. The fixture diagnosis showed that `Face8` has two already positioned neighbors. The atlas selected `Face14 <-> Face8`, a vertical side seam, as primary and ignored the horizontal `Face4 <-> Face8` seam that carries the transverse grid phase. The selection error came from scoring the target face's local edge orientation before the placed seam's global logical orientation.
+
+Resolved in 0.1.2 by prioritizing the orientation of the already positioned seam. For curved seams, `neighbor_transform_candidates()` maps the target seam basis to the placed seam basis with anisotropic scaling: `dl / sl` only in the tangent direction and scale `1.0` in the perpendicular direction. This matches a boundary whose local metric was sampled at another radius without moving an already aligned perpendicular side seam. The fixture uses tangent scale `1.080146` because the target logical edge is `43.6262 mm` and the placed shared edge is `47.1227 mm`.
+
+The regression test samples all four adjacency pairs at nine positions after atlas placement and requires both logical coordinates to agree to four decimal places. This rule is topology-driven: no face number, selected-face count, object name, or torus-specific conditional is allowed. Full-flow results remain 2,642 carrier triangles, 68 Diamond solids at each tested height, and 68 trimmed solids.
+
 Related future isolated experiments, if another periodic topology fails:
 
 1. Build boundary logical coordinates directly from edge pcurves.
@@ -275,3 +283,4 @@ The link target is normally `~/Library/Application Support/FreeCAD/v1-1/Mod/Patt
 - Interactive toolbar registration: validated after FreeCAD restart; all three tools and the Diamond group command are present.
 - The lower-left periodic face regression is corrected and covered by normalized-interval and full-flow tests.
 - Periodic interval unwrapping: validated in 0.1.1; broader periodic cycle fixtures remain future work.
+- Curved multi-seam transverse grid alignment: validated in 0.1.2 with all four fixture seams at zero sampled logical error.

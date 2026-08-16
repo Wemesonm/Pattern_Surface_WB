@@ -41,6 +41,44 @@ class MappingEquivalenceTests(unittest.TestCase):
         finally:
             App.closeDocument(document.Name)
 
+    def test_curved_face_with_two_neighbors_keeps_both_seams_aligned(self):
+        from pattern_surface.compatibility import v4_pipeline as engine
+
+        document = App.openDocument(str(ROOT / "tests/fixtures/container_four_faces.FCStd"))
+        try:
+            source = document.getObject("Thickness001")
+            names = ("Face14", "Face4", "Face8", "Face9")
+            entries = [{"object": source, "sub": name,
+                        "face": source.getSubObject(name), "picked": None}
+                       for name in sorted(names)]
+            for index, entry in enumerate(entries):
+                entry["index"] = index
+                engine.orient_entry(entry)
+            graph, _shared = engine.build_graph(entries)
+            engine.position_components(entries, graph)
+            by_index = {entry["index"]: entry for entry in entries}
+            checked = set()
+            for entry in entries:
+                for neighbor_index, edge, other_edge in graph[entry["index"]]:
+                    pair = tuple(sorted((entry["index"], neighbor_index)))
+                    if pair in checked:
+                        continue
+                    checked.add(pair)
+                    neighbor = by_index[neighbor_index]
+                    left, right = engine.aligned_edge_samples(edge, other_edge)
+                    for sample_index in range(9):
+                        ratio = sample_index / 8.0
+                        li = int(round(ratio * (len(left) - 1)))
+                        ri = int(round(ratio * (len(right) - 1)))
+                        qa = engine.apply_transform(
+                            entry, engine.local_xy_raw(entry, left[li]))
+                        qb = engine.apply_transform(
+                            neighbor, engine.local_xy_raw(neighbor, right[ri]))
+                        self.assertAlmostEqual(qa[0], qb[0], places=4)
+                        self.assertAlmostEqual(qa[1], qb[1], places=4)
+        finally:
+            App.closeDocument(document.Name)
+
 
 if __name__ == "__main__":
     unittest.main()
