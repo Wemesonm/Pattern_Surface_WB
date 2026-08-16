@@ -1652,7 +1652,7 @@ def clip_polygon(subject, clipper):
     return cleaned
 
 
-def canonical_triangles(bounds, extra=True):
+def canonical_triangles(bounds, extra=True, diamond_height=GRID_HEIGHT):
     """Yield one edge-connected equilateral triangle lattice.
 
     Consecutive rows are offset by half a side.  The previous implementation
@@ -1660,19 +1660,21 @@ def canonical_triangles(bounds, extra=True):
     then met only at a vertex instead of sharing their sloping edge.
     """
     x0, x1, y0, y1 = bounds
-    margin_x = GRID_SIDE if extra else 0.0
-    margin_y = GRID_HEIGHT if extra else 0.0
+    grid_height = float(diamond_height)
+    grid_side = 2.0 * grid_height / math.sqrt(3.0)
+    margin_x = grid_side if extra else 0.0
+    margin_y = grid_height if extra else 0.0
     # The requested margin is exactly one canonical row/column.  A single
     # guard column covers the half-side offset without producing a second
     # ring of cells around curved boundaries.
-    col0 = int(math.floor((x0 - margin_x) / GRID_SIDE)) - 1
-    col1 = int(math.ceil((x1 + margin_x) / GRID_SIDE)) + 1
-    row0 = int(math.floor((y0 - margin_y) / GRID_HEIGHT))
-    row1 = int(math.ceil((y1 + margin_y) / GRID_HEIGHT))
+    col0 = int(math.floor((x0 - margin_x) / grid_side)) - 1
+    col1 = int(math.ceil((x1 + margin_x) / grid_side)) + 1
+    row0 = int(math.floor((y0 - margin_y) / grid_height))
+    row1 = int(math.ceil((y1 + margin_y) / grid_height))
 
     def point(row, col):
-        shift = GRID_SIDE * 0.5 if row % 2 else 0.0
-        return [col * GRID_SIDE + shift, row * GRID_HEIGHT]
+        shift = grid_side * 0.5 if row % 2 else 0.0
+        return [col * grid_side + shift, row * grid_height]
 
     for row in range(row0, row1):
         for col in range(col0, col1):
@@ -2589,13 +2591,15 @@ def curved_row_pyramid_solid(canonical, context, height, apex_override=None, sou
 
 
 def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
+                diamond_height=GRID_HEIGHT,
                 allowed_ids=None, apex_records=None, source_shapes=None):
     # Eligibility is always evaluated against the real logical surface.  The
     # external mapper only completes a canonical cell that crosses its border;
     # it must never create detached rows made exclusively from ghost geometry.
     carriers = list(payload["triangles"])
     results, records, rejected = [], [], []
-    for triangle_id, canonical in canonical_triangles(payload["bounds"], extra=include_ghost):
+    for triangle_id, canonical in canonical_triangles(
+            payload["bounds"], extra=include_ghost, diamond_height=diamond_height):
         if allowed_ids is not None and triangle_id not in allowed_ids:
             continue
         context, fragments = local_cell_context(payload, canonical, carriers, include_ghost)
@@ -2623,11 +2627,12 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
     return results, records, rejected
 
 
-def build_cut_cells(payload, allowed_ids, apex_records):
+def build_cut_cells(payload, allowed_ids, apex_records, diamond_height=GRID_HEIGHT):
     """Rebuild only the physical portion of each canonical full cell."""
     carriers = list(payload["triangles"])
     results, records, rejected = [], [], []
-    for triangle_id, canonical in canonical_triangles(payload["bounds"], extra=False):
+    for triangle_id, canonical in canonical_triangles(
+            payload["bounds"], extra=False, diamond_height=diamond_height):
         if triangle_id not in allowed_ids:
             continue
         context, carrier_fragments = local_cell_context(payload, canonical, carriers, False)
@@ -2767,19 +2772,23 @@ def source_solids_by_face(doc, payload):
     return result
 
 
-def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT):
+def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None):
     doc = App.ActiveDocument
     if doc is None:
         fail("Abra um documento antes de executar o Pattern Full V4.")
     height = float(height)
+    diamond_height = float(diamond_height if diamond_height is not None
+                           else GRID_HEIGHT)
     if height < 0.01:
-        fail("A altura do Diamond deve ser pelo menos 0.01 mm.")
+        fail("A altura da piramide deve ser pelo menos 0.01 mm.")
+    if diamond_height < 0.01:
+        fail("A altura do diamante deve ser pelo menos 0.01 mm.")
     wrap = resolve_wrap_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
     if payload.get("schema") != SCHEMA:
         fail("Carrier selecionado nao e V4.")
     solids, records, rejected = build_cells(
-        payload, True, height=height,
+        payload, True, height=height, diamond_height=diamond_height,
         source_shapes=source_solids_by_face(doc, payload))
     if not solids:
         fail("Pattern Full V4 nao gerou solidos validos.")
@@ -2793,13 +2802,18 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT):
     add_string(run, "PatternId", "diamond", "Pattern Surface")
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_length(run, "PatternHeight", height, "Pattern Surface")
+    add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
     add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
     add_chunks(run, "DiamondPatternCellChunks",
-               {"cells": records, "parameters": {"height": height}},
+               {"cells": records, "parameters": {
+                   "height": height,
+                   "pyramid_height": height,
+                   "diamond_height": diamond_height,
+               }},
                "Diamond Pattern V4")
     doc.recompute()
-    console("pattern_full_v4: run={} height={:.3f} solids={} rejected={}".format(
-        name, height, len(solids), len(rejected)))
+    console("pattern_full_v4: run={} diamond_height={:.3f} pyramid_height={:.3f} solids={} rejected={}".format(
+        name, diamond_height, height, len(solids), len(rejected)))
     if rejected:
         warn("pattern_full_v4: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
@@ -2836,6 +2850,9 @@ def create_cut():
     pattern_height = length_value(
         getattr(pattern, "PatternHeight", cell_payload.get("parameters", {}).get(
             "height", DEFAULT_PATTERN_HEIGHT)))
+    diamond_height = length_value(
+        getattr(pattern, "DiamondHeight", cell_payload.get("parameters", {}).get(
+            "diamond_height", GRID_HEIGHT)), GRID_HEIGHT)
     allowed = {record["id"] for record in cell_payload["cells"]}
     apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
@@ -2843,7 +2860,8 @@ def create_cut():
     algorithm = "WRAP_CARRIER_V4_PHYSICAL_NORMAL_CUT"
     if not solids:
         warn("cut_v4: corte_fisico_falhou; tentando_rebuild_antigo")
-        solids, records, rejected = build_cut_cells(payload, allowed, apex)
+        solids, records, rejected = build_cut_cells(
+            payload, allowed, apex, diamond_height=diamond_height)
         algorithm = "WRAP_CARRIER_V4_CUT_REBUILD_FALLBACK"
     if not solids:
         fail("Cut V4 nao gerou solidos validos.")
@@ -2859,8 +2877,16 @@ def create_cut():
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_string(run, "PatternSource", pattern.Name, "Pattern Surface")
     add_length(run, "PatternHeight", pattern_height, "Pattern Surface")
+    add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
     add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
-    add_chunks(run, "DiamondPatternCellChunks", {"cells": records}, "Diamond Pattern V4")
+    add_chunks(run, "DiamondPatternCellChunks", {
+        "cells": records,
+        "parameters": {
+            "height": pattern_height,
+            "pyramid_height": pattern_height,
+            "diamond_height": diamond_height,
+        },
+    }, "Diamond Pattern V4")
     doc.recompute()
     console("cut_v4: run={} algoritmo={} solids={} rejected={}".format(name, algorithm, len(solids), len(rejected)))
     if rejected:

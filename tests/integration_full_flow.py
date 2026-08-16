@@ -101,12 +101,16 @@ for height in (0.5, 1.0, 2.0):
     else:
         assert_equal(ids, cell_ids, "cell IDs at height {}".format(height))
     assert abs(float(pattern.PatternHeight) - height) < 1.0e-9
+    assert abs(float(pattern.DiamondHeight) - 12.0) < 1.0e-9
     assert abs(float(payload["parameters"]["height"]) - height) < 1.0e-9
+    assert abs(float(payload["parameters"]["pyramid_height"]) - height) < 1.0e-9
+    assert abs(float(payload["parameters"]["diamond_height"]) - 12.0) < 1.0e-9
     patterns.append(pattern)
 
 select_objects(mapped, patterns[-1])
 trimmed = engine.create_cut()
 assert abs(float(trimmed.PatternHeight) - 2.0) < 1.0e-9
+assert abs(float(trimmed.DiamondHeight) - 12.0) < 1.0e-9
 assert_equal(trimmed.PatternMapSource, mapped.Name, "trim map source")
 assert_equal(trimmed.PatternSource, patterns[-1].Name, "trim pattern source")
 

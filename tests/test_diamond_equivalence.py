@@ -10,7 +10,8 @@ class DiamondEquivalenceTests(unittest.TestCase):
     def test_legacy_and_generic_properties_are_preserved(self):
         source = ENGINE.read_text(encoding="utf-8")
         for name in ("DiamondPatternAlgorithm", "DiamondPatternCellChunks",
-                     "PatternId", "PatternMapSource", "PatternHeight"):
+                     "PatternId", "PatternMapSource", "PatternHeight",
+                     "DiamondHeight"):
             self.assertIn(name, source)
 
     def test_pattern_registry_exposes_diamond(self):

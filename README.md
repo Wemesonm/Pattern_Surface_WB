@@ -18,7 +18,7 @@ Restart FreeCAD once after installation and select `Pattern_Surface_WB`. Geometr
 
 ## Diamond Pattern
 
-Select a Map Faces result and choose `Pattern Tools > Diamond Pattern`. The command asks for the triangle height in millimeters and remembers the last confirmed value. Select the map and generated pattern before running `Trim Surface`.
+Select a Map Faces result and choose `Pattern Tools > Diamond Pattern`. The command asks for `Diamond height` (the cell dimension on the mapped surface, initially 12 mm) and `Pyramid height` (the relief normal to the surface, initially 1 mm). Both last confirmed values are remembered. Select the map and generated pattern before running `Trim Surface`.
 
 ## Status
 

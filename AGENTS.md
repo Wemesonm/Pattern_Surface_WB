@@ -56,19 +56,19 @@ def create_pattern(map_object, parameters):
 
 Register the corresponding command descriptor in `patterns/registry.py`. Mapping must never import a pattern package.
 
-## Diamond Height Contract
+## Diamond Dimensions Contract
 
 - Dialog title: `Diamond Pattern`.
-- Field: `Triangle height (mm):`.
-- First default: `1.000 mm`; minimum: `0.010 mm`; precision: three decimals.
-- Preference: `BaseApp/Preferences/Mod/Pattern_Surface_WB/Patterns/Diamond/LastHeight`.
+- Field `Diamond height`: cell height on the mapped surface; first default `12.000 mm`.
+- Field `Pyramid height`: relief along the local outward surface normal; first default `1.000 mm`.
+- Both fields use millimeters, minimum `0.010 mm`, and three decimals.
+- Preferences: `LastDiamondHeight` and `LastPyramidHeight`; legacy `LastHeight` mirrors pyramid height.
 - Cancel makes no document or preference change.
-- Height is measured along the local outward surface normal.
-- The base mapping must remain fixed when height changes.
-- `height` is explicit through every principal and fallback solid path.
-- Pattern and cut objects store `PatternHeight` as `App::PropertyLength`.
-- Pattern payload stores `parameters.height`.
-- Trim reads the stored height and never asks again.
+- The Map Faces carrier remains fixed when either Diamond parameter changes.
+- Both dimensions are explicit through principal and fallback paths.
+- Pattern and cut objects store `DiamondHeight` and `PatternHeight` as `App::PropertyLength`.
+- Pattern payload stores `parameters.diamond_height`, `parameters.pyramid_height`, and legacy `parameters.height`.
+- Trim reads the stored dimensions and never asks again.
 
 ## FreeCAD Object Schemas
 
@@ -94,19 +94,20 @@ Generic properties:
 
 - `PatternId`, initially `diamond`.
 - `PatternMapSource`: internal name of the map object.
-- `PatternHeight`: FreeCAD length.
+- `DiamondHeight`: cell height measured in the logical mapped surface.
+- `PatternHeight`: pyramid relief measured along the local surface normal.
 
 Diamond compatibility properties:
 
 - `DiamondPatternVersion`, `DiamondPatternAlgorithm`.
 - `DiamondPatternWrapSource`, `DiamondPatternRejected`.
-- `DiamondPatternCellChunks`: compressed JSON containing `cells` and `parameters.height`.
+- `DiamondPatternCellChunks`: compressed JSON containing `cells`, `parameters.diamond_height`, `parameters.pyramid_height`, and legacy `parameters.height`.
 
 ### Trim Object
 
 Generic properties:
 
-- `PatternId`, `PatternMapSource`, `PatternSource`, `PatternHeight`.
+- `PatternId`, `PatternMapSource`, `PatternSource`, `DiamondHeight`, `PatternHeight`.
 
 Diamond compatibility properties:
 
@@ -126,7 +127,7 @@ periodic_seams[], periodic_adjustments[], components[]
 
 Each face record contains source object/subelement, native parameter range, metric tables, logical dimensions, orientation signs, normal sign, transform, and component. Carrier vertices contain logical `q`, physical `p`, normal `n`, UV and face ownership data.
 
-The Diamond cell payload contains `cells[]` and `parameters.height`. Cell records preserve canonical ID, logical geometry, physical apex, and data required by the trimming fallback.
+The Diamond cell payload contains `cells[]`, `parameters.diamond_height`, `parameters.pyramid_height`, and legacy `parameters.height`. Cell records preserve canonical ID, logical geometry, physical apex, and data required by the trimming fallback.
 
 ## Source Inventory
 
@@ -236,7 +237,7 @@ Visual baseline with `tests/fixtures/container_four_faces.FCStd`:
 2. Run `Map Faces`; record selected face count, adjacency, carrier triangle count, object properties, and screenshot.
 3. Select the map and run Diamond at `0.500`, `1.000`, and `2.000 mm`.
 4. Confirm only apex height changes; triangle bases and cell IDs remain fixed.
-5. Confirm `PatternHeight` and payload height match each run.
+5. Confirm `DiamondHeight`, `PatternHeight`, and both payload dimensions match each run.
 6. Select map plus pattern and run `Trim Surface`.
 7. Confirm Trim uses stored height, preserves pattern geometry, and records its sources.
 8. Close and reopen FreeCAD; confirm the last accepted height is remembered.
@@ -275,7 +276,7 @@ The link target is normally `~/Library/Application Support/FreeCAD/v1-1/Mod/Patt
 ## Current Migration State
 
 - Workbench and three command surfaces: migrated.
-- Pattern registry and Diamond height dialog: migrated.
+- Pattern registry and two-dimension Diamond dialog: migrated.
 - Original V3/V4 archives and fixture: present.
 - Modular namespaces: present as transitional facades.
 - V4 explicit height and generic metadata: adapted and automated checks passing.
