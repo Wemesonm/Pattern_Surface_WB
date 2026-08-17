@@ -19,7 +19,7 @@ SCHEMA = "WRAP_CARRIER_V4"
 WRAP_PREFIX = "DiamondSurfaceWrap_V4"
 FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
 CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
-BUILD_ID = "Pattern_Surface_WB_0.1.5_diamond_periodic_fit_candidate_2026-08-16"
+BUILD_ID = "Pattern_Surface_WB_0.1.5_periodic_trim_approved_2026-08-17"
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
 DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
@@ -2326,14 +2326,43 @@ def face_domain_polygon(record):
             transform([width, height]), transform([0.0, height])]
 
 
+def periodic_face_domain_polygons(payload, record):
+    """Return the original face domain plus its periodic representatives."""
+    polygons = [face_domain_polygon(record)]
+    component = record.get("component", 0)
+    for periodic in periodic_axis_records(payload):
+        if periodic["component"] != component:
+            continue
+        expanded = []
+        for polygon in polygons:
+            for offset in (-periodic["period"], 0.0, periodic["period"]):
+                clone = [list(point) for point in polygon]
+                for point in clone:
+                    point[periodic["axis"]] += offset
+                expanded.append(clone)
+        polygons = expanded
+    return polygons
+
+
 def domain_fragments(payload, canonical):
     fragments = []
     for record in payload.get("faces", []):
-        polygon = clip_polygon(canonical, face_domain_polygon(record))
-        if len(polygon) >= 3 and area2(polygon) > 1.0e-7:
-            fragments.append({"polygon": polygon, "face": record["index"],
-                              "component": record.get("component", 0)})
+        for domain in periodic_face_domain_polygons(payload, record):
+            polygon = clip_polygon(canonical, domain)
+            if len(polygon) >= 3 and area2(polygon) > 1.0e-7:
+                fragments.append({"polygon": polygon, "face": record["index"],
+                                  "component": record.get("component", 0)})
     return fragments
+
+
+def domain_coverage_ratio(payload, canonical):
+    """Measure canonical coverage, including periodic face representatives."""
+    total = area2(canonical)
+    if total <= 1.0e-12:
+        return 0.0
+    covered = sum(area2(fragment["polygon"])
+                  for fragment in domain_fragments(payload, canonical))
+    return min(1.0, covered / total)
 
 
 def subtriangle_points(canonical, i, j, upper):
@@ -3060,7 +3089,7 @@ def physical_cut_piece(cell, combined_envelope, envelopes, index):
 
 
 def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_height):
-    """Trim Full solids by the selected face envelopes, preserving Full geometry."""
+    """Trim only partial boundary cells, preserving covered Full geometry."""
     entries = hydrate_entries(doc, payload)
     envelopes = [exact_face_cut_envelope(entry, pattern_height) for entry in entries]
     envelopes = [shape for shape in envelopes if is_valid_shape(shape)]
@@ -3075,13 +3104,23 @@ def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_heigh
         return [], [], ["full_incompativel"]
 
     results, records, rejected = [], [], []
+    preserved, boundary = 0, 0
     for index, (cell, record) in enumerate(zip(full_solids, full_records), start=1):
+        canonical = record.get("canonical")
+        if canonical and domain_coverage_ratio(payload, canonical) >= 1.0 - 1.0e-7:
+            results.append(cell)
+            records.append(record)
+            preserved += 1
+            continue
+        boundary += 1
         pieces = physical_cut_piece(cell, combined_envelope, envelopes, index)
         if pieces:
             results.extend(pieces)
             records.append(record)
         else:
             rejected.append(record.get("id", "cell{}".format(index)))
+    console("cut_v4: celulas_preservadas={} celulas_borda={}".format(
+        preserved, boundary))
     return results, records, rejected
 
 
@@ -3218,7 +3257,7 @@ def create_cut():
     apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
         doc, payload, pattern, cell_payload, pattern_height)
-    algorithm = "WRAP_CARRIER_V4_PHYSICAL_NORMAL_CUT"
+    algorithm = "WRAP_CARRIER_V4_PERIODIC_LOGICAL_BOUNDARY_CUT"
     if not solids:
         warn("cut_v4: corte_fisico_falhou; tentando_rebuild_antigo")
         solids, records, rejected = build_cut_cells(

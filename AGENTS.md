@@ -64,10 +64,14 @@ When a change crosses tool boundaries, read every affected specification.
 
 ## Approved Baselines
 
-- Map Faces `0.1.4` (commit message `checkpoint: best approved Map Faces generic
-  grid 0.1.4`) is the current approved baseline. It preserves the periodic
-  unwrapping and transverse alignment from `44b8f19`, completes the lower row,
-  and adds the independent, component-centered orthogonal grid.
+- Map Faces and periodic Diamond closure `0.1.5` (commit `5e4648d`) is the
+  current approved mapping and pattern baseline. It preserves periodic
+  unwrapping, completes every preview column, fits the Diamond period within
+  the user tolerance, and closes all 240 pattern cells.
+- Trim Surface `0.1.5` (commit message `checkpoint: best approved periodic Trim
+  Surface 0.1.5`) is the current approved trimming baseline. On the 16-face
+  saved container it produces 240 records, 240 solids, zero rejected cells,
+  and preserves all 12 reverse periodic corner cells at full volume.
 - `44b8f19` remains the previous approved Map Faces baseline (`0.1.2`).
 - `ada0549` is the approved Diamond dimension-dialog baseline (`0.1.3`).
 - The four-face fixture baseline is 2,642 physical carrier triangles, 68 Diamond

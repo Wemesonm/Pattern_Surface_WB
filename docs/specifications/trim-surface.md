@@ -53,6 +53,22 @@ this removal.
 Pattern-specific reconstruction, when unavoidable, is provided through the
 pattern package contract rather than imported into generic trim modules.
 
+`TRIM-REQ-024` **Implemented** - Internal adjacency seams and periodic closure
+seams are never cutting boundaries. A Full cell whose canonical footprint is
+completely covered by the logical mapped domain is preserved byte-for-byte;
+only cells with partial logical coverage are sent to physical boundary
+booleans.
+
+`TRIM-REQ-025` **Implemented** - Logical-domain coverage includes translated
+copies for every periodic map axis. A valid cell at a periodic closure cannot
+be rejected or reduced to a negligible sliver because its canonical footprint
+uses the translated representative of a source face.
+
+`TRIM-REQ-026` **Implemented** - Trim output preserves one record per accepted
+Full cell. Multiple physical fragments from one boundary boolean must remain
+traceable to that single cell, and negligible fragments cannot silently count
+as a successful unmodified cell.
+
 ## V4 Trim Migration Ledger
 
 | Functions | Destination | Current status |
@@ -101,6 +117,11 @@ in `data-contracts.md`; do not rewrite source objects merely by reading them.
 ## Known Limitations and Deferred Work
 
 - Current envelopes and fallbacks remain partly in the transitional V4 engine.
+- The primary boundary-preservation rule is pattern-independent, but the V4
+  compatibility facade still reads `DiamondPatternCellChunks`, Diamond
+  dimension aliases, and uses a Diamond-specific reconstruction fallback.
+  Before a second pattern is registered, move the canonical-cell payload and
+  fallback reconstruction behind the generic pattern contract.
 - Internal-hole trimming needs dedicated planar and curved fixtures.
 - Pattern-independent fallback hooks are not yet part of the registry contract.
 
@@ -111,6 +132,8 @@ Automated:
 - reject mismatched map-pattern selections;
 - use stored pattern height without opening a dialog;
 - preserve accepted cell identity and metadata;
+- preserve fully covered periodic cells without running boundary booleans
+  (`TRIM-REQ-024`, `TRIM-REQ-025`);
 - validate principal and fallback trim paths;
 - remove pattern geometry inside planar and curved internal holes;
 - read legacy Diamond trim payloads.

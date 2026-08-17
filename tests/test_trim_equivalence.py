@@ -1,7 +1,10 @@
 import pathlib
 import unittest
+from unittest import mock
 
 import FreeCAD as App
+
+from pattern_surface.compatibility import v4_pipeline as core
 
 
 ROOT = pathlib.Path(__file__).parents[1]
@@ -21,6 +24,35 @@ class TrimEquivalenceTests(unittest.TestCase):
         source = (ROOT / "pattern_surface/compatibility/v4_pipeline.py").read_text(encoding="utf-8")
         self.assertIn('getattr(pattern, "PatternHeight"', source)
         self.assertIn("exact_face_cut_envelope(entry, pattern_height)", source)
+
+    def test_periodic_domain_copy_covers_closure_cell(self):
+        payload = {
+            "faces": [{
+                "index": 1,
+                "component": 0,
+                "width": 1.0,
+                "height": 1.0,
+                "transform": [1.0, 0.0, 0.0, 1.0, 10.0, 0.0],
+            }],
+        }
+        canonical = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        periodic = [{"component": 0, "axis": 0, "period": 10.0}]
+        with mock.patch.object(core, "periodic_axis_records", return_value=periodic):
+            self.assertAlmostEqual(core.domain_coverage_ratio(payload, canonical), 1.0)
+
+    def test_nonperiodic_domain_does_not_cover_distant_cell(self):
+        payload = {
+            "faces": [{
+                "index": 1,
+                "component": 0,
+                "width": 1.0,
+                "height": 1.0,
+                "transform": [1.0, 0.0, 0.0, 1.0, 10.0, 0.0],
+            }],
+        }
+        canonical = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        with mock.patch.object(core, "periodic_axis_records", return_value=[]):
+            self.assertEqual(core.domain_coverage_ratio(payload, canonical), 0.0)
 
 
 if __name__ == "__main__":
