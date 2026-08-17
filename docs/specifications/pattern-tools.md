@@ -57,18 +57,44 @@ fallbacks, and rejected-cell reporting.
 half-column row offsets, `up/down` triangle generation, and all Diamond-specific
 lattice limits out of mapping and into `patterns/diamond/`.
 
-`PAT-REQ-022` **Specified** - Diamond uses Map Faces `Column width` as its
-horizontal lattice dimension and `Row height` as its triangle height. It may
-produce geometrically distorted triangles when those independent values do not
-describe an equilateral triangle; it must not silently change the map.
+`PAT-REQ-022` **Implemented in 0.1.5** - Diamond owns its requested triangle height and
+derives the natural equilateral side from it. On an open map this natural side
+is used unchanged. On a closed periodic component, `PAT-REQ-026` may adjust only
+the lateral side; the requested triangle height remains unchanged.
 
-`PAT-REQ-023` **Specified** - After the generic map-grid migration, the Diamond
-dialog asks only for `Pyramid height`. It uses millimeters, a minimum of
-`0.010 mm`, three decimals, and the last confirmed preference value. Cancel
-causes no document or preference mutation.
+`PAT-REQ-023` **Implemented** - The Diamond dialog asks for `Diamond height`,
+`Pyramid height`, and `Closure fit tolerance`. All use millimeters, a minimum of
+`0.010 mm`, three decimals, and their last confirmed preference values. The
+default closure tolerance is `0.200 mm`. Cancel causes no document or preference
+mutation.
 
 `PAT-REQ-024` **Baseline** - Pyramid height is applied along the local outward
 surface normal and is explicit in principal and fallback solid paths.
+
+`PAT-REQ-025` **Implemented in 0.1.5** - A closed periodic component must be sampled across
+its logical closing seam. Diamond creates one canonical representative for a
+cell crossing that seam and must not reject, duplicate, or externally extend it
+as though the seam were an open boundary. A local adjacency cycle is not enough
+to classify a map as periodic: the seam owners must occupy opposite limits of
+the complete logical component.
+
+`PAT-REQ-026` **Implemented in 0.1.5** - Let `P` be the closed logical period, `S` the
+natural equilateral side derived from the requested Diamond height, and `N` the
+nearest positive integer to `P / S`. If `abs(N * S - P)` is within the
+user-supplied closure fit tolerance, Diamond uses the fitted lateral side
+`P / N` while preserving the requested vertical triangle height.
+
+`PAT-REQ-027` **Implemented in 0.1.5** - Before applying a non-zero periodic fit, show a
+confirmation containing the measured period, module count, natural side,
+effective side, total adjustment, and configured tolerance. Cancelling creates
+no object and changes no preferences. If the error exceeds the tolerance,
+report incompatibility and do not silently fit the lattice.
+
+`PAT-REQ-028` **Implemented in 0.1.5** - A periodic Diamond lattice uses a deterministic
+`0.001 mm` logical phase epsilon to prevent lattice vertices from coinciding
+exactly with BRep corner transitions. This epsilon changes only lattice origin,
+not triangle height, effective side, module count, or closure. Store and reuse
+the phase in trimming fallbacks.
 
 ## V4 Diamond Migration Ledger
 
@@ -133,7 +159,9 @@ by Trim Surface fallbacks.
 according to `data-contracts.md`.
 
 `PAT-REQ-041` **Specified** - During migration, readers accept legacy
-`diamond_height`; new Diamond geometry uses map column width and row height.
+`diamond_height`. New payloads distinguish requested `diamond_height`, natural
+`diamond_side`, effective `diamond_side`, `closure_fit_tolerance`, module count,
+and total closure adjustment.
 
 ## Known Limitations and Deferred Work
 
@@ -153,6 +181,9 @@ Automated:
 - pyramid height changes apexes but not bases or cell IDs;
 - legacy pattern payloads remain readable;
 - cancellation creates no objects and changes no preferences.
+- a periodic map within the user tolerance fits only its lateral side,
+  preserves triangle height, and creates one copy of every seam cell;
+- a periodic map outside the user tolerance reports incompatibility.
 
 Visual:
 

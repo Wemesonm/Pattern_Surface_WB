@@ -12,6 +12,9 @@ MAX_DIAMOND_HEIGHT = 1000.0
 DEFAULT_PYRAMID_HEIGHT = 1.0
 MIN_PYRAMID_HEIGHT = 0.01
 MAX_PYRAMID_HEIGHT = 1000.0
+DEFAULT_CLOSURE_FIT_TOLERANCE = 0.20
+MIN_CLOSURE_FIT_TOLERANCE = 0.0
+MAX_CLOSURE_FIT_TOLERANCE = 1000.0
 
 # Compatibility aliases for callers written before the two dimensions were
 # exposed separately.

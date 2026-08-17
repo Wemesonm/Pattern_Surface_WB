@@ -123,6 +123,26 @@ and limits. Characterize `snap_lower_curved_strips_to_grid()` before changing it
 if its effect is required by the approved baseline, replace its pattern-size
 dependency with a topology- and seam-based rule.
 
+`MAP-REQ-027` **Implemented in 0.1.5** - In a cyclic component, record cycle
+closure seams from adjacency edges that were not used by the atlas positioning
+tree. Never infer the opened or periodic seam from face indices, selection
+order, or the lexicographically last adjacency pair. Local non-periodic cycles
+remain eligible for later geometric filtering. Multiple physical boundary
+edges that describe the same component axis and period produce one component-
+level periodic record.
+
+`MAP-REQ-028` **Implemented in 0.1.5** - A periodic logical axis anchors its grid
+phase at the lower periodic boundary. The physical location of that boundary
+is determined by the atlas and may appear between any source faces. Centering
+the phase must not create a double-width closure cell. This changes only the
+logical grid origin; carrier geometry and physical dimensions remain intact.
+
+`MAP-REQ-029` **Implemented in 0.1.5** - The visible grid is a lightweight view
+of the carrier interpolation. Connected samples of one logical row or column
+are represented by a smooth preview edge instead of one selectable BRep edge
+per carrier triangle. Preview simplification must not alter serialized carrier
+triangles or the geometry consumed by Pattern Tools.
+
 ## Regression Evidence
 
 ### Periodic trimmed intervals

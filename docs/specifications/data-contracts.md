@@ -109,6 +109,10 @@ Generic properties:
 - `PatternMapSource`;
 - `PatternHeight`.
 
+Diamond periodic-fit properties may additionally expose requested triangle
+height, natural lateral side, effective lateral side, fit tolerance, module
+count, and accumulated closure adjustment.
+
 `DATA-REQ-020` **Specified** - A generic pattern payload contains:
 
 ```text
@@ -129,6 +133,12 @@ Diamond compatibility properties and fields remain readable during migration:
 - `DiamondPatternCellChunks`;
 - `parameters.diamond_height`;
 - `parameters.pyramid_height`;
+- `parameters.diamond_side`;
+- `parameters.natural_diamond_side`;
+- `parameters.closure_fit_tolerance`;
+- `parameters.closure_modules`;
+- `parameters.closure_adjustment`;
+- `parameters.periodic_phase`;
 - legacy `parameters.height`.
 
 `DATA-REQ-021` **Baseline** - Cell records preserve canonical ID, logical base,

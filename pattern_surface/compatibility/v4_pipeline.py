@@ -19,13 +19,15 @@ SCHEMA = "WRAP_CARRIER_V4"
 WRAP_PREFIX = "DiamondSurfaceWrap_V4"
 FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
 CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
-BUILD_ID = "Pattern_Surface_WB_0.1.4_map_generic_grid_candidate_2026-08-16"
+BUILD_ID = "Pattern_Surface_WB_0.1.5_diamond_periodic_fit_candidate_2026-08-16"
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
 DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
 DEFAULT_MAP_ROW_HEIGHT = GRID_HEIGHT
 DEFAULT_MAP_CLOSURE_TOLERANCE = 0.05
 DEFAULT_PATTERN_HEIGHT = 1.0
+DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE = 0.20
+PERIODIC_PATTERN_PHASE = 0.001
 CONTACT = 0.005
 MAX_EDGE = 1.5
 SAG = 0.05
@@ -1238,8 +1240,9 @@ def third_point_2d(qa, qb, pa, pb, pc, opposite=None):
     return candidates[0]
 
 
-def cycle_seam_pairs(groups, graph):
+def cycle_seam_pairs(groups, graph, atlas_pairs=None):
     pairs = set()
+    placed_pairs = set(atlas_pairs) if atlas_pairs is not None else None
     for group in groups:
         nodes = {item["index"] for item in group}
         edges = sorted({tuple(sorted((node, neighbor))) for node in nodes
@@ -1248,7 +1251,10 @@ def cycle_seam_pairs(groups, graph):
             # A closed carrier is opened at one deterministic BRep edge.  Its
             # two logical sides are recorded as a periodic pair, never joined
             # by selection order.
-            pairs.add(edges[-1])
+            if placed_pairs is None:
+                pairs.add(edges[-1])
+            else:
+                pairs.update(pair for pair in edges if pair not in placed_pairs)
     return pairs
 
 
@@ -1524,6 +1530,7 @@ def carrier_preview(triangles, bounds, column_width=DEFAULT_MAP_COLUMN_WIDTH,
             (True, x0, x1, origin[0], float(column_width)),
             (False, y0, y1, origin[1], float(row_height))):
         for value in grid_line_values(lower, upper, phase, step):
+            samples = []
             for triangle in triangles:
                 segment = line_triangle_points(triangle, value, vertical)
                 if segment is None:
@@ -1533,8 +1540,65 @@ def carrier_preview(triangles, bounds, column_width=DEFAULT_MAP_COLUMN_WIDTH,
                     points = [item[0] + item[1] * 0.01 for item in mapped]
                     length = points[0].distanceToPoint(points[1])
                     if length > 1.0e-7:
-                        edges.append(Part.makePolygon(points))
+                        axis = 1 if vertical else 0
+                        samples.append((segment[0][axis], points[0],
+                                        segment[1][axis], points[1]))
+            edges.extend(preview_line_edges(samples))
     return Part.makeCompound(edges) if edges else Part.Shape()
+
+
+def preview_point_key(point, tolerance=1.0e-4):
+    return tuple(int(round(value / tolerance))
+                 for value in (point.x, point.y, point.z))
+
+
+def preview_line_edges(samples):
+    """Collapse triangle-sized preview segments into connected spline edges."""
+    graph = {}
+    points = {}
+    parameters = {}
+    for ta, pa, tb, pb in samples:
+        left, right = preview_point_key(pa), preview_point_key(pb)
+        if left == right:
+            continue
+        graph.setdefault(left, set()).add(right)
+        graph.setdefault(right, set()).add(left)
+        points.setdefault(left, pa)
+        points.setdefault(right, pb)
+        parameters[left] = min(parameters.get(left, ta), ta)
+        parameters[right] = min(parameters.get(right, tb), tb)
+    result = []
+    remaining = set(graph)
+    while remaining:
+        seed = remaining.pop()
+        component = {seed}
+        queue = [seed]
+        while queue:
+            current = queue.pop()
+            for neighbor in graph[current]:
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    component.add(neighbor)
+                    queue.append(neighbor)
+        ordered = sorted(component, key=lambda item: parameters[item])
+        vectors = [points[item] for item in ordered]
+        if len(vectors) < 2:
+            continue
+        if len(vectors) == 2:
+            result.append(Part.makeLine(vectors[0], vectors[1]))
+            continue
+        periodic = all(len(graph[item] & component) == 2 for item in component)
+        try:
+            curve = Part.BSplineCurve()
+            # Degree one preserves every mapped sample exactly.  Cubic
+            # interpolation can overshoot sharply at face seams and create
+            # long preview-only spikes outside the carrier.
+            curve.buildFromPoles(vectors, periodic, 1)
+            result.append(curve.toShape())
+        except Exception:
+            fallback = vectors + [vectors[0]] if periodic else vectors
+            result.append(Part.makePolygon(fallback))
+    return result
 
 
 def entry_record(entry):
@@ -1572,7 +1636,10 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     # The face transforms above are the authoritative atlas.  Do not unfold
     # tessellation triangles a second time: that creates overlapping logical
     # regions and switches support in the middle of canonical cells.
-    seam_pairs = cycle_seam_pairs(groups, graph)
+    seam_pairs = cycle_seam_pairs(groups, graph, atlas_pairs)
+    console("wrap_v4: emendas_periodicas_atlas={}".format(
+        ",".join("{}>{}".format(left + 1, right + 1)
+                 for left, right in sorted(seam_pairs)) or "nenhuma"))
     periodic_records = []
     boundary = external_segments(entries, graph, triangles, seam_pairs)
     xs = [vertex["q"][0] for tri in triangles for vertex in tri["v"]]
@@ -1597,6 +1664,10 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
                "periodic_adjustments": periodic_records,
                "components": [[item["index"] for item in group] for group in groups],
                "compatibility": compatibility}
+    periodic_records = periodic_axis_records(payload)
+    for record in periodic_records:
+        grid_origin[record["axis"]] = record["lower"]
+    payload["periodic_adjustments"] = periodic_records
     name = next_name(doc, WRAP_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = name
@@ -1727,7 +1798,154 @@ def clip_polygon(subject, clipper):
     return cleaned
 
 
-def canonical_triangles(bounds, extra=True, diamond_height=GRID_HEIGHT):
+def component_bounds_from_payload(payload):
+    grouped = {}
+    for triangle in payload.get("triangles", []):
+        component = triangle.get("component", 0)
+        grouped.setdefault(component, []).extend(vertex["q"] for vertex in triangle["v"])
+    return {component: logical_bounds(points) for component, points in grouped.items()}
+
+
+def periodic_axis_records(payload):
+    """Describe axis-aligned logical periods recorded by Map Faces."""
+    faces = {record["index"]: record for record in payload.get("faces", [])}
+    component_bounds = component_bounds_from_payload(payload)
+    records = []
+    by_period = {}
+    for raw_pair in payload.get("periodic_seams", []):
+        pair = tuple(sorted(int(value) for value in raw_pair))
+        left, right = faces.get(pair[0]), faces.get(pair[1])
+        if left is None or right is None:
+            continue
+        component = left.get("component", 0)
+        if right.get("component", 0) != component or component not in component_bounds:
+            continue
+        outer = component_bounds[component]
+        left_bounds = logical_bounds(face_domain_polygon(left))
+        right_bounds = logical_bounds(face_domain_polygon(right))
+        x_error = min(
+            abs(left_bounds[0] - outer[0]) + abs(right_bounds[1] - outer[1]),
+            abs(right_bounds[0] - outer[0]) + abs(left_bounds[1] - outer[1]),
+        )
+        y_error = min(
+            abs(left_bounds[2] - outer[2]) + abs(right_bounds[3] - outer[3]),
+            abs(right_bounds[2] - outer[2]) + abs(left_bounds[3] - outer[3]),
+        )
+        axis = 0 if x_error <= y_error else 1
+        lower, upper = outer[axis * 2], outer[axis * 2 + 1]
+        period = upper - lower
+        if period <= 1.0e-8:
+            continue
+        edge_error = min(x_error, y_error)
+        left_interval = left_bounds[axis * 2:axis * 2 + 2]
+        right_interval = right_bounds[axis * 2:axis * 2 + 2]
+        separation = max(
+            left_interval[0] - right_interval[1],
+            right_interval[0] - left_interval[1],
+            0.0,
+        )
+        # A graph cycle around a local patch or vertex is not a periodic map.
+        # The two owners must be separated logical copies at opposite limits
+        # of the complete component, not already aligned adjacent domains.
+        if edge_error > max(0.05, period * 1.0e-4) or separation <= 0.05:
+            continue
+        key = (component, axis, round(lower, 6), round(upper, 6))
+        existing = by_period.get(key)
+        if existing is not None:
+            existing["pairs"].append(pair)
+            existing["edge_error"] = min(existing["edge_error"], edge_error)
+            existing["separation"] = max(existing["separation"], separation)
+            continue
+        record = {
+            "pair": pair,
+            "pairs": [pair],
+            "component": component,
+            "axis": axis,
+            "lower": lower,
+            "upper": upper,
+            "period": period,
+            "edge_error": edge_error,
+            "separation": separation,
+        }
+        records.append(record)
+        by_period[key] = record
+    return records
+
+
+def periodic_diamond_fit(payload, diamond_height,
+                         tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE):
+    diamond_height = float(diamond_height)
+    tolerance = float(tolerance)
+    natural_side = 2.0 * diamond_height / math.sqrt(3.0)
+    horizontal = [record for record in periodic_axis_records(payload) if record["axis"] == 0]
+    result = {
+        "adjusted": False,
+        "compatible": True,
+        "diamond_height": diamond_height,
+        "natural_side": natural_side,
+        "effective_side": natural_side,
+        "tolerance": tolerance,
+        "period": None,
+        "modules": None,
+        "adjustment": 0.0,
+        "periodic_phase": PERIODIC_PATTERN_PHASE if horizontal else 0.0,
+    }
+    if not horizontal:
+        return result
+    periods = [record["period"] for record in horizontal]
+    period = periods[0]
+    if any(abs(value - period) > 1.0e-5 for value in periods[1:]):
+        result.update({"compatible": False, "reason": "multiple_periods", "period": period})
+        return result
+    modules = max(1, int(round(period / natural_side)))
+    adjustment = abs(modules * natural_side - period)
+    result.update({
+        "period": period,
+        "modules": modules,
+        "adjustment": adjustment,
+        "compatible": adjustment <= tolerance + 1.0e-9,
+    })
+    if result["compatible"] and adjustment > 1.0e-8:
+        result["adjusted"] = True
+        result["effective_side"] = period / modules
+    return result
+
+
+def translated_carrier(triangle, axis, offset):
+    clone = dict(triangle)
+    clone["v"] = []
+    for vertex in triangle["v"]:
+        item = dict(vertex)
+        item["q"] = list(vertex["q"])
+        item["q"][axis] += offset
+        clone["v"].append(item)
+    clone["periodic_copy"] = True
+    return clone
+
+
+def periodic_carriers(payload, carriers):
+    result = list(carriers)
+    for record in periodic_axis_records(payload):
+        members = [triangle for triangle in carriers
+                   if triangle.get("component", 0) == record["component"]]
+        for offset in (-record["period"], record["period"]):
+            result.extend(translated_carrier(triangle, record["axis"], offset)
+                          for triangle in members)
+    return result
+
+
+def canonical_periodic_representative(payload, canonical):
+    center = [sum(point[0] for point in canonical) / 3.0,
+              sum(point[1] for point in canonical) / 3.0]
+    for record in periodic_axis_records(payload):
+        value = center[record["axis"]]
+        if value < record["lower"] - LOGICAL_TOL or value >= record["upper"] - LOGICAL_TOL:
+            return False
+    return True
+
+
+def canonical_triangles(bounds, extra=True, diamond_height=GRID_HEIGHT,
+                        diamond_side=None, origin_x=0.0):
     """Yield one edge-connected equilateral triangle lattice.
 
     Consecutive rows are offset by half a side.  The previous implementation
@@ -1736,20 +1954,22 @@ def canonical_triangles(bounds, extra=True, diamond_height=GRID_HEIGHT):
     """
     x0, x1, y0, y1 = bounds
     grid_height = float(diamond_height)
-    grid_side = 2.0 * grid_height / math.sqrt(3.0)
+    grid_side = float(diamond_side if diamond_side is not None
+                      else 2.0 * grid_height / math.sqrt(3.0))
+    origin_x = float(origin_x)
     margin_x = grid_side if extra else 0.0
     margin_y = grid_height if extra else 0.0
     # The requested margin is exactly one canonical row/column.  A single
     # guard column covers the half-side offset without producing a second
     # ring of cells around curved boundaries.
-    col0 = int(math.floor((x0 - margin_x) / grid_side)) - 1
-    col1 = int(math.ceil((x1 + margin_x) / grid_side)) + 1
+    col0 = int(math.floor((x0 - margin_x - origin_x) / grid_side)) - 1
+    col1 = int(math.ceil((x1 + margin_x - origin_x) / grid_side)) + 1
     row0 = int(math.floor((y0 - margin_y) / grid_height))
     row1 = int(math.ceil((y1 + margin_y) / grid_height))
 
     def point(row, col):
         shift = grid_side * 0.5 if row % 2 else 0.0
-        return [col * grid_side + shift, row * grid_height]
+        return [origin_x + col * grid_side + shift, row * grid_height]
 
     for row in range(row0, row1):
         for col in range(col0, col1):
@@ -2249,7 +2469,25 @@ def external_mapping_records(payload, components=None, faces=None, bounds=None):
     records = []
     components = set(components) if components is not None else None
     faces = set(faces) if faces is not None else None
-    for segment in payload.get("external_segments", []):
+    segments = list(payload.get("external_segments", []))
+    original_segments = list(segments)
+    for periodic in periodic_axis_records(payload):
+        for segment in original_segments:
+            if segment.get("component", 0) != periodic["component"]:
+                continue
+            for offset in (-periodic["period"], periodic["period"]):
+                clone = dict(segment)
+                clone["a"] = dict(segment["a"])
+                clone["b"] = dict(segment["b"])
+                clone["a"]["q"] = list(segment["a"]["q"])
+                clone["b"]["q"] = list(segment["b"]["q"])
+                clone["a"]["q"][periodic["axis"]] += offset
+                clone["b"]["q"][periodic["axis"]] += offset
+                clone["periodic_copy"] = True
+                clone["periodic_axis"] = periodic["axis"]
+                clone["periodic_offset"] = offset
+                segments.append(clone)
+    for segment in segments:
         if components is not None and segment.get("component", 0) not in components:
             continue
         if faces is not None and segment["face"] not in faces:
@@ -2270,6 +2508,8 @@ def external_mapping_records(payload, components=None, faces=None, bounds=None):
             continue
         center_q = [sum(v["q"][0] for v in carrier["v"]) / 3.0,
                     sum(v["q"][1] for v in carrier["v"]) / 3.0]
+        if segment.get("periodic_copy"):
+            center_q[segment["periodic_axis"]] += segment["periodic_offset"]
         qnx, qny = -qty, qtx
         if (center_q[0] - midpoint[0]) * qnx + (center_q[1] - midpoint[1]) * qny > 0:
             qnx, qny = -qnx, -qny
@@ -2667,14 +2907,19 @@ def curved_row_pyramid_solid(canonical, context, height, apex_override=None, sou
 
 def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
                 diamond_height=GRID_HEIGHT,
+                diamond_side=None,
+                periodic_phase=0.0,
                 allowed_ids=None, apex_records=None, source_shapes=None):
     # Eligibility is always evaluated against the real logical surface.  The
     # external mapper only completes a canonical cell that crosses its border;
     # it must never create detached rows made exclusively from ghost geometry.
-    carriers = list(payload["triangles"])
+    carriers = periodic_carriers(payload, list(payload["triangles"]))
     results, records, rejected = [], [], []
     for triangle_id, canonical in canonical_triangles(
-            payload["bounds"], extra=include_ghost, diamond_height=diamond_height):
+            payload["bounds"], extra=include_ghost, diamond_height=diamond_height,
+            diamond_side=diamond_side, origin_x=periodic_phase):
+        if not canonical_periodic_representative(payload, canonical):
+            continue
         if allowed_ids is not None and triangle_id not in allowed_ids:
             continue
         context, fragments = local_cell_context(payload, canonical, carriers, include_ghost)
@@ -2702,12 +2947,16 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
     return results, records, rejected
 
 
-def build_cut_cells(payload, allowed_ids, apex_records, diamond_height=GRID_HEIGHT):
+def build_cut_cells(payload, allowed_ids, apex_records, diamond_height=GRID_HEIGHT,
+                    diamond_side=None, periodic_phase=0.0):
     """Rebuild only the physical portion of each canonical full cell."""
-    carriers = list(payload["triangles"])
+    carriers = periodic_carriers(payload, list(payload["triangles"]))
     results, records, rejected = [], [], []
     for triangle_id, canonical in canonical_triangles(
-            payload["bounds"], extra=False, diamond_height=diamond_height):
+            payload["bounds"], extra=False, diamond_height=diamond_height,
+            diamond_side=diamond_side, origin_x=periodic_phase):
+        if not canonical_periodic_representative(payload, canonical):
+            continue
         if triangle_id not in allowed_ids:
             continue
         context, carrier_fragments = local_cell_context(payload, canonical, carriers, False)
@@ -2847,23 +3096,37 @@ def source_solids_by_face(doc, payload):
     return result
 
 
-def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None):
+def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
+                        closure_fit_tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE):
     doc = App.ActiveDocument
     if doc is None:
         fail("Abra um documento antes de executar o Pattern Full V4.")
     height = float(height)
     diamond_height = float(diamond_height if diamond_height is not None
                            else GRID_HEIGHT)
+    closure_fit_tolerance = float(closure_fit_tolerance)
     if height < 0.01:
         fail("A altura da piramide deve ser pelo menos 0.01 mm.")
     if diamond_height < 0.01:
         fail("A altura do diamante deve ser pelo menos 0.01 mm.")
+    if not math.isfinite(closure_fit_tolerance) or closure_fit_tolerance < 0.0:
+        fail("A tolerancia de fechamento deve ser um comprimento finito nao negativo.")
     wrap = resolve_wrap_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
     if payload.get("schema") != SCHEMA:
         fail("Carrier selecionado nao e V4.")
+    fit = periodic_diamond_fit(payload, diamond_height, closure_fit_tolerance)
+    if not fit.get("compatible", True):
+        fail(
+            "Fechamento do Diamond incompativel: periodo {:.6f} mm, {} modulos, "
+            "ajuste necessario {:.6f} mm, tolerancia {:.6f} mm.".format(
+                fit.get("period", 0.0), fit.get("modules", 0),
+                fit.get("adjustment", 0.0), fit.get("tolerance", 0.0)))
+    diamond_side = float(fit["effective_side"])
+    periodic_phase = float(fit.get("periodic_phase", 0.0))
     solids, records, rejected = build_cells(
         payload, True, height=height, diamond_height=diamond_height,
+        diamond_side=diamond_side, periodic_phase=periodic_phase,
         source_shapes=source_solids_by_face(doc, payload))
     if not solids:
         fail("Pattern Full V4 nao gerou solidos validos.")
@@ -2878,17 +3141,33 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None):
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_length(run, "PatternHeight", height, "Pattern Surface")
     add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
+    add_length(run, "DiamondNaturalSide", fit["natural_side"], "Pattern Surface")
+    add_length(run, "DiamondEffectiveSide", diamond_side, "Pattern Surface")
+    add_length(run, "ClosureFitTolerance", closure_fit_tolerance, "Pattern Surface")
+    add_length(run, "ClosureAdjustment", fit.get("adjustment", 0.0), "Pattern Surface")
+    add_integer(run, "ClosureModules", fit.get("modules") or 0, "Pattern Surface")
+    add_bool(run, "ClosureAdjusted", fit.get("adjusted", False), "Pattern Surface")
+    add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
     add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
     add_chunks(run, "DiamondPatternCellChunks",
                {"cells": records, "parameters": {
                    "height": height,
                    "pyramid_height": height,
                    "diamond_height": diamond_height,
+                   "natural_diamond_side": fit["natural_side"],
+                   "diamond_side": diamond_side,
+                   "closure_fit_tolerance": closure_fit_tolerance,
+                   "closure_modules": fit.get("modules"),
+                   "closure_adjustment": fit.get("adjustment", 0.0),
+                   "closure_adjusted": fit.get("adjusted", False),
+                   "periodic_phase": periodic_phase,
                }},
                "Diamond Pattern V4")
     doc.recompute()
-    console("pattern_full_v4: run={} diamond_height={:.3f} pyramid_height={:.3f} solids={} rejected={}".format(
-        name, diamond_height, height, len(solids), len(rejected)))
+    console("pattern_full_v4: run={} diamond_height={:.3f} diamond_side={:.6f} "
+            "closure_adjustment={:.6f} pyramid_height={:.3f} solids={} rejected={}".format(
+                name, diamond_height, diamond_side, fit.get("adjustment", 0.0),
+                height, len(solids), len(rejected)))
     if rejected:
         warn("pattern_full_v4: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
@@ -2928,6 +3207,13 @@ def create_cut():
     diamond_height = length_value(
         getattr(pattern, "DiamondHeight", cell_payload.get("parameters", {}).get(
             "diamond_height", GRID_HEIGHT)), GRID_HEIGHT)
+    diamond_side = length_value(
+        getattr(pattern, "DiamondEffectiveSide", cell_payload.get("parameters", {}).get(
+            "diamond_side", 2.0 * diamond_height / math.sqrt(3.0))),
+        2.0 * diamond_height / math.sqrt(3.0))
+    periodic_phase = length_value(
+        getattr(pattern, "PeriodicPatternPhase", cell_payload.get("parameters", {}).get(
+            "periodic_phase", 0.0)), 0.0)
     allowed = {record["id"] for record in cell_payload["cells"]}
     apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
@@ -2936,7 +3222,8 @@ def create_cut():
     if not solids:
         warn("cut_v4: corte_fisico_falhou; tentando_rebuild_antigo")
         solids, records, rejected = build_cut_cells(
-            payload, allowed, apex, diamond_height=diamond_height)
+            payload, allowed, apex, diamond_height=diamond_height,
+            diamond_side=diamond_side, periodic_phase=periodic_phase)
         algorithm = "WRAP_CARRIER_V4_CUT_REBUILD_FALLBACK"
     if not solids:
         fail("Cut V4 nao gerou solidos validos.")
@@ -2953,6 +3240,8 @@ def create_cut():
     add_string(run, "PatternSource", pattern.Name, "Pattern Surface")
     add_length(run, "PatternHeight", pattern_height, "Pattern Surface")
     add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
+    add_length(run, "DiamondEffectiveSide", diamond_side, "Pattern Surface")
+    add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
     add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
     add_chunks(run, "DiamondPatternCellChunks", {
         "cells": records,
@@ -2960,6 +3249,8 @@ def create_cut():
             "height": pattern_height,
             "pyramid_height": pattern_height,
             "diamond_height": diamond_height,
+            "diamond_side": diamond_side,
+            "periodic_phase": periodic_phase,
         },
     }, "Diamond Pattern V4")
     doc.recompute()

@@ -54,6 +54,41 @@ class MappingEquivalenceTests(unittest.TestCase):
         self.assertNotIn("snap_lower_curved_strips_to_grid(group)",
                          source[position_start:position_end])
 
+    def test_cycle_seam_is_the_edge_excluded_from_atlas_tree(self):
+        # MAP-REQ-027: face indices do not identify the opened atlas seam.
+        from pattern_surface.compatibility import v4_pipeline as engine
+
+        group = [{"index": index} for index in range(4)]
+        graph = {
+            0: [(1, None, None), (3, None, None)],
+            1: [(0, None, None), (2, None, None)],
+            2: [(1, None, None), (3, None, None)],
+            3: [(2, None, None), (0, None, None)],
+        }
+        atlas_pairs = {(0, 1), (0, 3), (2, 3)}
+        self.assertEqual(
+            {(1, 2)},
+            engine.cycle_seam_pairs([group], graph, atlas_pairs),
+        )
+
+    def test_periodic_grid_phase_includes_period_boundary(self):
+        # MAP-REQ-028: periodic closure is a grid boundary, not a double cell.
+        from pattern_surface.compatibility import v4_pipeline as engine
+
+        self.assertEqual(
+            [0.0, 10.0, 20.0, 30.0, 40.0],
+            engine.grid_line_values(0.0, 40.0, 0.0, 10.0),
+        )
+
+    def test_preview_uses_connected_curve_edges(self):
+        # MAP-REQ-029: avoid one selectable BRep edge per triangle fragment.
+        source = ENGINE.read_text(encoding="utf-8")
+        start = source.index("def carrier_preview")
+        end = source.index("def preview_point_key", start)
+        source = source[start:end]
+        self.assertIn("preview_line_edges(samples)", source)
+        self.assertNotIn("edges.append(Part.makePolygon(points))", source)
+
     def test_invalid_grid_dimensions_are_rejected(self):
         # MAP-REQ-010: public callers receive the same positive-length guard.
         from pattern_surface.compatibility import v4_pipeline as engine
