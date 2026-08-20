@@ -1,4 +1,4 @@
-"""FreeCAD GUI initialization for Pattern_Surface_WB."""
+"""FreeCAD GUI initialization for Auzyron Patterns WB."""
 
 from pattern_surface.workbench import register_workbench
 

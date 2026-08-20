@@ -10,9 +10,9 @@
   <url type="repository" branch="main">https://github.com/Wemesonm/Pattern_Surface_WB</url>
   <content>
     <workbench>
-      <name>Pattern_Surface_WB</name>
+      <name>Auzyron Patterns WB</name>
       <classname>PatternSurfaceWorkbench</classname>
-      <description>Surface mapping and modular pattern tools.</description>
+      <description>Auzyron surface mapping and modular pattern tools.</description>
       <version>0.1.5</version>
       <subdirectory>./</subdirectory>
       <icon>pattern_surface/resources/icons/workbench.svg</icon>

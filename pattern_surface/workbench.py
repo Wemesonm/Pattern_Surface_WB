@@ -9,7 +9,7 @@ ICON = os.path.join(os.path.dirname(__file__), "resources", "icons", "workbench.
 
 
 class PatternSurfaceWorkbench(Gui.Workbench):
-    MenuText = "Pattern_Surface_WB"
+    MenuText = "Auzyron Patterns WB"
     ToolTip = "Map adjacent faces, apply patterns, and trim generated solids"
     Icon = ICON
 

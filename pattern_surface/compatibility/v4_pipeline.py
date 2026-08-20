@@ -19,6 +19,10 @@ SCHEMA = "WRAP_CARRIER_V4"
 WRAP_PREFIX = "DiamondSurfaceWrap_V4"
 FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
 CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
+MAP_LABEL = "Mapped Surface"
+CARRIER_LABEL = "Mapping Grid"
+PATTERN_LABEL = "Diamond Pattern"
+TRIM_LABEL = "Trimmed Pattern"
 BUILD_ID = "Pattern_Surface_WB_0.1.5_periodic_trim_approved_2026-08-17"
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
@@ -167,6 +171,12 @@ def next_name(doc, prefix):
     while doc.getObject("{}_Run_{:03d}".format(prefix, index)) is not None:
         index += 1
     return "{}_Run_{:03d}".format(prefix, index)
+
+
+def short_label(label, name):
+    """Return a stable human-readable label while retaining legacy object names."""
+    suffix = name.rsplit("_", 1)[-1]
+    return "{} {}".format(label, suffix) if suffix.isdigit() else label
 
 
 def outer_edges(face):
@@ -1670,7 +1680,7 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     payload["periodic_adjustments"] = periodic_records
     name = next_name(doc, WRAP_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
-    run.Label = name
+    run.Label = short_label(MAP_LABEL, name)
     run.Shape = Part.makeCompound([entry["face"] for entry in entries])
     add_string(run, "WrapVersion", "Wrap Faces V4", "Wrap Faces V4")
     add_string(run, "WrapAlgorithm", SCHEMA, "Wrap Faces V4")
@@ -1690,7 +1700,7 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     add_string_list(run, "MapCompatibilityReport", [], "Pattern Surface")
     add_chunks(run, "MapPayloadChunks", payload, "Pattern Surface")
     preview = doc.addObject("PartDesign::Feature", name + "_CarrierGrid")
-    preview.Label = name + " Carrier Grid"
+    preview.Label = short_label(CARRIER_LABEL, name)
     preview.Shape = carrier_preview(
         triangles, bounds, column_width, row_height, grid_origin)
     add_string(preview, "WrapParentRun", run.Name, "Wrap Faces V4")
@@ -3171,7 +3181,7 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
         fail("Pattern Full V4 nao gerou solidos validos.")
     name = next_name(doc, FULL_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
-    run.Label = name + " Solid"
+    run.Label = short_label(PATTERN_LABEL, name)
     run.Shape = Part.makeCompound(solids)
     add_string(run, "DiamondPatternVersion", "Pattern Full From Wrap V4", "Diamond Pattern V4")
     add_string(run, "DiamondPatternAlgorithm", "WRAP_CARRIER_V4_FULL", "Diamond Pattern V4")
@@ -3268,7 +3278,7 @@ def create_cut():
         fail("Cut V4 nao gerou solidos validos.")
     name = next_name(doc, CUT_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
-    run.Label = name + " Solid"
+    run.Label = short_label(TRIM_LABEL, name)
     run.Shape = Part.makeCompound(solids)
     add_string(run, "DiamondPatternVersion", "Cut From Wrap V4", "Diamond Pattern V4")
     add_string(run, "DiamondPatternAlgorithm", algorithm, "Diamond Pattern V4")

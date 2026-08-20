@@ -1,2 +1,2 @@
-__version__ = "0.1.5"
-BUILD_ID = "Pattern_Surface_WB_0.1.5_periodic_trim_approved_2026-08-17"
+__version__ = "0.1.6"
+BUILD_ID = "Auzyron_Patterns_WB_0.1.6_naming_refinement_2026-08-20"
