@@ -25,6 +25,17 @@ from ..common.identifiers import (
     WRAP_PREFIX,
     short_label,
 )
+from ..common.properties_core import (
+    add_bool as _add_bool,
+    add_integer as _add_integer,
+    add_length as _add_length,
+    add_string as _add_string,
+    add_string_list as _add_string_list,
+    add_vector as _add_vector,
+    length_value as _length_value,
+    next_name as _next_name,
+)
+from ..common.selection_core import selected_faces as collect_selected_faces
 from ..version import BUILD_ID
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
@@ -107,49 +118,35 @@ def qkey3(point, scale=100000.0):
 
 
 def add_string(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyString", name, group)
-    setattr(obj, name, str(value))
+    return _add_string(obj, name, value, group)
 
 
 def add_bool(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyBool", name, group)
-    setattr(obj, name, bool(value))
+    return _add_bool(obj, name, value, group)
 
 
 def add_integer(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyInteger", name, group)
-    setattr(obj, name, int(value))
+    return _add_integer(obj, name, value, group)
 
 
 def add_string_list(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyStringList", name, group)
-    setattr(obj, name, [str(item) for item in value])
+    return _add_string_list(obj, name, value, group)
 
 
 def add_vector(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyVector", name, group)
-    setattr(obj, name, App.Vector(float(value[0]), float(value[1]), 0.0))
+    return _add_vector(obj, name, value, group)
 
 
 def add_length(obj, name, value, group):
-    if name not in obj.PropertiesList:
-        obj.addProperty("App::PropertyLength", name, group)
-    setattr(obj, name, float(value))
+    return _add_length(obj, name, value, group)
 
 
 def length_value(value, default=DEFAULT_PATTERN_HEIGHT):
-    try:
-        return float(value.Value)
-    except AttributeError:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return float(default)
+    return _length_value(value, default)
+
+
+def next_name(doc, prefix):
+    return _next_name(doc, prefix)
 
 
 def add_chunks(obj, name, payload, group):
@@ -166,13 +163,6 @@ def load_chunks(obj, name):
     if not chunks:
         fail("Objeto {} nao contem {}.".format(obj.Name, name))
     return json.loads(zlib.decompress(base64.b64decode("".join(chunks))).decode("utf-8"))
-
-
-def next_name(doc, prefix):
-    index = 1
-    while doc.getObject("{}_Run_{:03d}".format(prefix, index)) is not None:
-        index += 1
-    return "{}_Run_{:03d}".format(prefix, index)
 
 
 def outer_edges(face):
@@ -206,32 +196,7 @@ def shared_edge(left, right):
 
 
 def selected_faces():
-    entries = []
-    seen = set()
-    for selection in Gui.Selection.getSelectionEx():
-        obj = selection.Object
-        names = list(selection.SubElementNames or [])
-        shapes = list(selection.SubObjects or [])
-        picked = None
-        try:
-            picked = selection.PickedPoints[0]
-        except Exception:
-            pass
-        for pos, shape in enumerate(shapes):
-            if getattr(shape, "ShapeType", "") != "Face":
-                continue
-            name = names[pos] if pos < len(names) else "Face{}".format(pos + 1)
-            key = (obj.Name, name)
-            if key in seen:
-                continue
-            seen.add(key)
-            entries.append({"object": obj, "sub": name, "face": shape, "picked": picked})
-    if not entries:
-        fail("Selecione uma ou mais faces antes de executar Map Faces.")
-    entries.sort(key=lambda item: (item["object"].Name, item["sub"]))
-    for index, entry in enumerate(entries):
-        entry["index"] = index
-    return entries
+    return collect_selected_faces()
 
 
 def source_solid(entry):

@@ -1,6 +1,5 @@
-from ..compatibility.v4_pipeline import (
+from .properties_core import (
     add_bool,
-    add_chunks,
     add_integer,
     add_length,
     add_string,
@@ -12,7 +11,6 @@ from ..compatibility.v4_pipeline import (
 
 __all__ = [
     "add_bool",
-    "add_chunks",
     "add_integer",
     "add_length",
     "add_string",
