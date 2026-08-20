@@ -275,14 +275,8 @@ def interp(table, value, inverse=False):
 
 
 def tangent(face, bounds, axis):
-    u0, u1, v0, v1 = bounds
-    u = (u0 + u1) * 0.5
-    v = (v0 + v1) * 0.5
-    du = max(abs(u1 - u0) * 1.0e-4, 1.0e-8)
-    dv = max(abs(v1 - v0) * 1.0e-4, 1.0e-8)
-    if axis == "u":
-        return norm(face.valueAt(min(u1, u + du), v) - face.valueAt(max(u0, u - du), v))
-    return norm(face.valueAt(u, min(v1, v + dv)) - face.valueAt(u, max(v0, v - dv)))
+    from ..mapping.orientation import tangent as implementation
+    return implementation(face, bounds, axis)
 
 
 def orient_entry(entry):
