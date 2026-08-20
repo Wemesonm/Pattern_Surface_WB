@@ -1,7 +1,8 @@
-import importlib
 import os
 
 import FreeCAD as App
+
+from ..common.runtime import maybe_reload
 
 
 COMMAND_ID = "PatternSurface_MapFaces"
@@ -22,5 +23,5 @@ class MapFacesCommand:
     def Activated(self):
         from ..mapping import service
 
-        importlib.reload(service)
+        maybe_reload(service)
         service.create_map()

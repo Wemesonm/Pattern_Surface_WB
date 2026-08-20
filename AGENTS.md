@@ -1,8 +1,8 @@
-# Pattern_Surface_WB Agent Guide
+# Auzyron Patterns WB Agent Guide
 
 ## Mission
 
-`Pattern_Surface_WB` is a specification-driven FreeCAD workbench with three
+`Auzyron Patterns WB` is a specification-driven FreeCAD workbench with three
 separate tools:
 
 1. `Map Faces` creates a generic logical map and physical carrier from adjacent
@@ -107,7 +107,7 @@ toolbar changes; geometry service modules reload on command activation.
 
 ## Repository
 
-- Project: `Pattern_Surface_WB`
+- Project: `Auzyron_Patterns_WB`
 - Remote: `https://github.com/Wemesonm/Pattern_Surface_WB.git`
 - Package version: `pattern_surface/version.py` and `package.xml`
 - Active code: `pattern_surface/`

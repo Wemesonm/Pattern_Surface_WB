@@ -1,18 +1,17 @@
-import importlib
-
 import FreeCADGui as Gui
 
+from ...common.runtime import maybe_reload
 from . import parameters, solids
 
 
 def run():
-    importlib.reload(parameters)
+    maybe_reload(parameters)
     values = parameters.get_parameters()
     if values is None:
         return None
     selected = Gui.Selection.getSelection()
     map_object = selected[0] if selected else None
-    importlib.reload(solids)
+    maybe_reload(solids)
     fit = solids.analyze_closure_fit(map_object, values)
     if not fit.get("compatible", True):
         parameters.show_closure_incompatible(fit)

@@ -1,4 +1,4 @@
-# Pattern_Surface_WB
+# Auzyron Patterns WB
 
 FreeCAD workbench for mapping adjacent faces, generating surface patterns, and trimming generated solids to the mapped surface.
 
@@ -14,7 +14,7 @@ FreeCAD workbench for mapping adjacent faces, generating surface patterns, and t
 python3 scripts/install_dev.py
 ```
 
-Restart FreeCAD once after installation and select `Pattern_Surface_WB`. Geometry modules are reloaded on every command click, so algorithm edits normally do not require another restart.
+Restart FreeCAD once after installation and select `Auzyron Patterns WB`. The stable runtime does not reload modules on every command. During development, set `AUZYRON_PATTERNS_DEV_RELOAD=1` before starting FreeCAD to enable explicit module reloading.
 
 ## Diamond Pattern
 

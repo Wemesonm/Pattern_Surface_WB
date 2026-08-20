@@ -13,7 +13,8 @@ from .metadata import (
 )
 
 
-PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Pattern_Surface_WB/Patterns/Diamond"
+PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Auzyron_Patterns_WB/Patterns/Diamond"
+LEGACY_PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Pattern_Surface_WB/Patterns/Diamond"
 PREFERENCE_KEY = "LastHeight"
 DIAMOND_HEIGHT_KEY = "LastDiamondHeight"
 PYRAMID_HEIGHT_KEY = "LastPyramidHeight"
@@ -24,22 +25,32 @@ def preferences():
     return App.ParamGet(PREFERENCE_PATH)
 
 
+def legacy_preferences():
+    return App.ParamGet(LEGACY_PREFERENCE_PATH)
+
+
+def stored_float(key, default):
+    value = preferences().GetFloat(key, -1.0)
+    if value >= 0.0:
+        return value
+    return legacy_preferences().GetFloat(key, default)
+
+
 def last_diamond_height():
     return max(MIN_DIAMOND_HEIGHT,
-               preferences().GetFloat(DIAMOND_HEIGHT_KEY, DEFAULT_DIAMOND_HEIGHT))
+               stored_float(DIAMOND_HEIGHT_KEY, DEFAULT_DIAMOND_HEIGHT))
 
 
 def last_pyramid_height():
-    legacy = preferences().GetFloat(PREFERENCE_KEY, DEFAULT_PYRAMID_HEIGHT)
+    legacy = stored_float(PREFERENCE_KEY, DEFAULT_PYRAMID_HEIGHT)
     return max(MIN_PYRAMID_HEIGHT,
-               preferences().GetFloat(PYRAMID_HEIGHT_KEY, legacy))
+               stored_float(PYRAMID_HEIGHT_KEY, legacy))
 
 
 def last_closure_fit_tolerance():
     return max(MIN_CLOSURE_FIT_TOLERANCE,
-               preferences().GetFloat(
-                   CLOSURE_FIT_TOLERANCE_KEY,
-                   DEFAULT_CLOSURE_FIT_TOLERANCE))
+               stored_float(CLOSURE_FIT_TOLERANCE_KEY,
+                            DEFAULT_CLOSURE_FIT_TOLERANCE))
 
 
 def save_parameters(diamond_height, pyramid_height, closure_fit_tolerance):

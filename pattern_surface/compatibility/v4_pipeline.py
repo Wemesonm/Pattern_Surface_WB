@@ -14,16 +14,18 @@ import FreeCAD as App
 import FreeCADGui as Gui
 import Part
 
-
-SCHEMA = "WRAP_CARRIER_V4"
-WRAP_PREFIX = "DiamondSurfaceWrap_V4"
-FULL_PREFIX = "DiamondPatternFullFromWrap_V4"
-CUT_PREFIX = "DiamondPatternCutFromWrap_V4"
-MAP_LABEL = "Mapped Surface"
-CARRIER_LABEL = "Mapping Grid"
-PATTERN_LABEL = "Diamond Pattern"
-TRIM_LABEL = "Trimmed Pattern"
-BUILD_ID = "Pattern_Surface_WB_0.1.5_periodic_trim_approved_2026-08-17"
+from ..common.identifiers import (
+    CARRIER_LABEL,
+    CUT_PREFIX,
+    FULL_PREFIX,
+    MAP_LABEL,
+    PATTERN_LABEL,
+    SCHEMA,
+    TRIM_LABEL,
+    WRAP_PREFIX,
+    short_label,
+)
+from ..version import BUILD_ID
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
 DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
@@ -173,12 +175,6 @@ def next_name(doc, prefix):
     return "{}_Run_{:03d}".format(prefix, index)
 
 
-def short_label(label, name):
-    """Return a stable human-readable label while retaining legacy object names."""
-    suffix = name.rsplit("_", 1)[-1]
-    return "{} {}".format(label, suffix) if suffix.isdigit() else label
-
-
 def outer_edges(face):
     try:
         return list(face.OuterWire.OrderedEdges)
@@ -231,7 +227,7 @@ def selected_faces():
             seen.add(key)
             entries.append({"object": obj, "sub": name, "face": shape, "picked": picked})
     if not entries:
-        fail("Selecione uma ou mais faces antes de executar Wrap Faces V4.")
+        fail("Selecione uma ou mais faces antes de executar Map Faces.")
     entries.sort(key=lambda item: (item["object"].Name, item["sub"]))
     for index, entry in enumerate(entries):
         entry["index"] = index
@@ -1627,7 +1623,7 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
                 closure_tolerance=DEFAULT_MAP_CLOSURE_TOLERANCE):
     doc = App.ActiveDocument
     if doc is None:
-        fail("Abra um documento antes de executar Wrap Faces V4.")
+        fail("Abra um documento antes de executar Map Faces.")
     validate_map_grid(column_width, row_height, closure_tolerance)
     console("wrap_v4: build={} file={}".format(BUILD_ID, __file__))
     entries = selected_faces()
@@ -3149,7 +3145,7 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                         closure_fit_tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE):
     doc = App.ActiveDocument
     if doc is None:
-        fail("Abra um documento antes de executar o Pattern Full V4.")
+        fail("Abra um documento antes de executar o Diamond Pattern.")
     height = float(height)
     diamond_height = float(diamond_height if diamond_height is not None
                            else GRID_HEIGHT)
@@ -3178,7 +3174,7 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
         diamond_side=diamond_side, periodic_phase=periodic_phase,
         source_shapes=source_solids_by_face(doc, payload))
     if not solids:
-        fail("Pattern Full V4 nao gerou solidos validos.")
+        fail("Diamond Pattern nao gerou solidos validos.")
     name = next_name(doc, FULL_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = short_label(PATTERN_LABEL, name)
@@ -3235,18 +3231,18 @@ def resolve_cut_selection(doc):
         elif getattr(obj, "DiamondPatternAlgorithm", "") == "WRAP_CARRIER_V4_FULL":
             pattern = obj
     if wrap is None or pattern is None:
-        fail("Selecione o Pattern Full V4 e o Wrap V4 correspondentes.")
+        fail("Selecione o Diamond Pattern e o Mapped Surface correspondentes.")
     pattern_map = (getattr(pattern, "PatternMapSource", "") or
                    getattr(pattern, "DiamondPatternWrapSource", ""))
     if pattern_map != wrap.Name:
-        fail("O Pattern Full V4 nao pertence ao Wrap V4 selecionado.")
+        fail("O Diamond Pattern nao pertence ao Mapped Surface selecionado.")
     return wrap, pattern
 
 
 def create_cut():
     doc = App.ActiveDocument
     if doc is None:
-        fail("Abra um documento antes de executar o Cut V4.")
+        fail("Abra um documento antes de executar o Trim Surface.")
     wrap, pattern = resolve_cut_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
     cell_payload = load_chunks(pattern, "DiamondPatternCellChunks")
@@ -3275,7 +3271,7 @@ def create_cut():
             diamond_side=diamond_side, periodic_phase=periodic_phase)
         algorithm = "WRAP_CARRIER_V4_CUT_REBUILD_FALLBACK"
     if not solids:
-        fail("Cut V4 nao gerou solidos validos.")
+        fail("Trim Surface nao gerou solidos validos.")
     name = next_name(doc, CUT_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = short_label(TRIM_LABEL, name)

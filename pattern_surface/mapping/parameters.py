@@ -1,7 +1,8 @@
 import FreeCAD as App
 
 
-PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Pattern_Surface_WB/MapFaces"
+PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Auzyron_Patterns_WB/MapFaces"
+LEGACY_PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Pattern_Surface_WB/MapFaces"
 COLUMN_WIDTH_KEY = "LastColumnWidth"
 ROW_HEIGHT_KEY = "LastRowHeight"
 CLOSURE_TOLERANCE_KEY = "LastClosureTolerance"
@@ -17,16 +18,26 @@ def preferences():
     return App.ParamGet(PREFERENCE_PATH)
 
 
+def legacy_preferences():
+    return App.ParamGet(LEGACY_PREFERENCE_PATH)
+
+
+def stored_float(key, default):
+    value = preferences().GetFloat(key, -1.0)
+    if value >= 0.0:
+        return value
+    return legacy_preferences().GetFloat(key, default)
+
+
 def last_values():
-    store = preferences()
     return {
         "column_width": max(
-            MIN_LENGTH, store.GetFloat(COLUMN_WIDTH_KEY, DEFAULT_COLUMN_WIDTH)),
+            MIN_LENGTH, stored_float(COLUMN_WIDTH_KEY, DEFAULT_COLUMN_WIDTH)),
         "row_height": max(
-            MIN_LENGTH, store.GetFloat(ROW_HEIGHT_KEY, DEFAULT_ROW_HEIGHT)),
+            MIN_LENGTH, stored_float(ROW_HEIGHT_KEY, DEFAULT_ROW_HEIGHT)),
         "closure_tolerance": max(
-            MIN_LENGTH,
-            store.GetFloat(CLOSURE_TOLERANCE_KEY, DEFAULT_CLOSURE_TOLERANCE)),
+            MIN_LENGTH, stored_float(CLOSURE_TOLERANCE_KEY,
+                                     DEFAULT_CLOSURE_TOLERANCE)),
     }
 
 

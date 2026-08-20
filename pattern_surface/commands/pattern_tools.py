@@ -1,7 +1,8 @@
-import importlib
 import os
 
 import FreeCAD as App
+
+from ..common.runtime import maybe_reload
 
 
 GROUP_COMMAND_ID = "PatternSurface_PatternTools"
@@ -24,7 +25,7 @@ class DiamondPatternCommand:
     def Activated(self):
         from ..patterns.diamond import command
 
-        importlib.reload(command)
+        maybe_reload(command)
         command.run()
 
 
@@ -39,7 +40,7 @@ class PatternToolsGroup:
     def GetCommands(self):
         from ..patterns import registry
 
-        importlib.reload(registry)
+        maybe_reload(registry)
         return tuple(item["command_id"] for item in registry.patterns())
 
     def GetDefaultCommand(self):

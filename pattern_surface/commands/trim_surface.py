@@ -1,7 +1,8 @@
-import importlib
 import os
 
 import FreeCAD as App
+
+from ..common.runtime import maybe_reload
 
 
 COMMAND_ID = "PatternSurface_TrimSurface"
@@ -22,5 +23,5 @@ class TrimSurfaceCommand:
     def Activated(self):
         from ..trimming import service
 
-        importlib.reload(service)
+        maybe_reload(service)
         service.trim_pattern()

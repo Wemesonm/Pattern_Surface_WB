@@ -3,7 +3,7 @@
 ## Purpose
 
 These documents are the normative product and engineering specifications for
-`Pattern_Surface_WB`. Runtime behavior must trace to a requirement in one tool
+`Auzyron Patterns WB`. Runtime behavior must trace to a requirement in one tool
 specification or the shared data contract.
 
 ## Documents
@@ -68,4 +68,3 @@ Every tool specification contains:
 - compatibility requirements;
 - known limitations and deferred work;
 - automated and visual acceptance tests.
-
