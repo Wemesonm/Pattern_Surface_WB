@@ -62,7 +62,7 @@ or called by a modular file.
 | `mapped_vertex`, `split_carrier_triangle`, `tessellated_carrier`, `entry_contains_logical`, `regular_curved_carrier`, `midpoint_vertex`, `weld_logical_nodes`, `refine_conforming_round`, `conforming_carrier` | `mapping/carrier.py` | Facade |
 | `validate_logical_seams`, `triangle_edge_key`, `third_point_2d`, `cycle_seam_pairs`, `rotate_component`, `close_periodic_component`, `unfold_carrier` | seams and carrier internals | Facade |
 | `point_on_edge`, `external_segments` | `mapping/carrier.py` | Facade |
-| `line_triangle_points`, `carrier_preview` | `mapping/preview.py` | Facade; generic grid extraction pending |
+| `line_triangle_points`, `grid_line_values`, `preview_point_key`, `preview_line_edges`, `carrier_preview` | `mapping/preview.py` | Migrated; V4 names remain compatibility wrappers |
 | `entry_record`, `create_wrap`, `resolve_wrap_selection`, `hydrate_entries` | `mapping/service.py` | Transitional orchestration |
 
 ## User Interface

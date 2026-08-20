@@ -8,6 +8,7 @@ import FreeCAD as App
 ROOT = pathlib.Path(__file__).parents[1]
 ORIGINAL = ROOT / "archive/v4_original/Wrap_pipeline_V4_core.py"
 ENGINE = ROOT / "pattern_surface/compatibility/v4_pipeline.py"
+PREVIEW = ROOT / "pattern_surface/mapping/preview.py"
 
 
 def functions(path):
@@ -82,12 +83,17 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_preview_uses_connected_curve_edges(self):
         # MAP-REQ-029: avoid one selectable BRep edge per triangle fragment.
-        source = ENGINE.read_text(encoding="utf-8")
-        start = source.index("def carrier_preview")
-        end = source.index("def preview_point_key", start)
-        source = source[start:end]
+        source = PREVIEW.read_text(encoding="utf-8")
         self.assertIn("preview_line_edges(samples)", source)
         self.assertNotIn("edges.append(Part.makePolygon(points))", source)
+
+    def test_preview_is_owned_by_mapping_package(self):
+        # MAP-REQ-029: preview generation is not implemented in the V4
+        # compatibility module anymore.
+        source = PREVIEW.read_text(encoding="utf-8")
+        self.assertIn("def carrier_preview", source)
+        self.assertIn("def preview_line_edges", source)
+        self.assertNotIn("patterns", source.lower())
 
     def test_invalid_grid_dimensions_are_rejected(self):
         # MAP-REQ-010: public callers receive the same positive-length guard.
