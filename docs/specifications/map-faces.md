@@ -56,8 +56,8 @@ or called by a modular file.
 | `outer_edges`, `endpoints`, `same_edge`, `shared_edge`, `selected_faces`, `source_solid` | selection and adjacency | Facade |
 | `surface_period`, `unwrap_parameter`, `surface_parameters`, `parameter_range`, `face_center`, `interp`, `edge_fraction`, `local_xy_raw`, `local_xy`, `local_uv`, `apply_transform`, `invert_transform`, `point_from_logical` | `mapping/parameterization.py` | Migrated; V4 names remain compatibility wrappers |
 | `axis_length_table` | `mapping/parameterization.py` | Migrated; V4 name remains a compatibility wrapper |
-| `tangent` | `mapping/orientation.py` | Migrated; V4 name remains a compatibility wrapper |
-| `outward`, `orient_entry`, `signed_normal_at`, `edge_midpoint`, `align_connected_normals` | `mapping/orientation.py` | Facade |
+| `tangent`, `outward`, `signed_normal_at`, `edge_midpoint`, `align_connected_normals` | `mapping/orientation.py` | Migrated; V4 names remain compatibility wrappers |
+| `orient_entry` | `mapping/orientation.py` | Facade; orchestration retained with parameterization |
 | `edge_samples`, `apply_matrix`, `aligned_edge_samples`, `seam_limit`, `neighbor_transform_candidates`, `seam_matrix_error`, `fit_neighbor_to_constraints`, `fit_neighbor` | `mapping/seams.py` | Facade |
 | `build_graph`, `components` | `mapping/adjacency.py` | Facade |
 | `transformed_entry_bounds`, `snap_lower_curved_strips_to_grid`, `position_components`, `atlas_seam_pairs`, `edge_direction_matches`, `add_logical_seam_overrides`, `seam_override` | `mapping/seams.py` | Facade; pattern-size dependency pending removal |
