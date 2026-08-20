@@ -62,6 +62,26 @@ def face_center(face):
         return face.valueAt((u0 + u1) * 0.5, (v0 + v1) * 0.5)
 
 
+def axis_length_table(face, bounds, axis, samples=64):
+    u0, u1, v0, v1 = bounds
+    fixed = (v0 + v1) * 0.5 if axis == "u" else (u0 + u1) * 0.5
+    table = [(0.0, 0.0)]
+    total = 0.0
+    previous = None
+    for index in range(samples + 1):
+        ratio = float(index) / samples
+        point = (face.valueAt(u0 + (u1 - u0) * ratio, fixed)
+                 if axis == "u" else
+                 face.valueAt(fixed, v0 + (v1 - v0) * ratio))
+        if previous is not None:
+            total += point.distanceToPoint(previous)
+        table.append((ratio, total))
+        previous = point
+    if total <= 1.0e-9:
+        _core().fail("Metrica degenerada na face.")
+    return [[a, b / total] for a, b in table], total
+
+
 def interp(table, value, inverse=False):
     pairs = [[row[1], row[0]] for row in table] if inverse else table
     if value <= pairs[0][0]:
