@@ -54,7 +54,8 @@ or called by a modular file.
 | Functions | Destination | Current status |
 | --- | --- | --- |
 | `outer_edges`, `endpoints`, `same_edge`, `shared_edge`, `selected_faces`, `source_solid` | selection and adjacency | Facade |
-| `parameter_range`, `surface_period`, `unwrap_parameter`, `surface_parameters`, `face_center`, `axis_length_table`, `interp`, `edge_fraction`, `local_xy_raw`, `local_xy`, `local_uv`, `apply_transform`, `invert_transform`, `point_from_logical` | `mapping/parameterization.py` | Facade; periodic regression fixed |
+| `surface_period`, `unwrap_parameter`, `surface_parameters`, `parameter_range`, `face_center`, `interp`, `edge_fraction`, `local_xy_raw`, `local_xy`, `local_uv`, `apply_transform`, `invert_transform`, `point_from_logical` | `mapping/parameterization.py` | Migrated; V4 names remain compatibility wrappers |
+| `axis_length_table` | `mapping/parameterization.py` | Facade; retained with orientation until the next checkpoint |
 | `outward`, `tangent`, `orient_entry`, `signed_normal_at`, `edge_midpoint`, `align_connected_normals` | `mapping/orientation.py` | Facade |
 | `edge_samples`, `apply_matrix`, `aligned_edge_samples`, `seam_limit`, `neighbor_transform_candidates`, `seam_matrix_error`, `fit_neighbor_to_constraints`, `fit_neighbor` | `mapping/seams.py` | Facade |
 | `build_graph`, `components` | `mapping/adjacency.py` | Facade |
