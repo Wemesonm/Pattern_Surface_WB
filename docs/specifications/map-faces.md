@@ -59,7 +59,7 @@ or called by a modular file.
 | `tangent`, `outward`, `signed_normal_at`, `edge_midpoint`, `align_connected_normals` | `mapping/orientation.py` | Migrated; V4 names remain compatibility wrappers |
 | `orient_entry` | `mapping/orientation.py` | Facade; orchestration retained with parameterization |
 | `edge_samples`, `apply_matrix`, `aligned_edge_samples`, `seam_limit`, `neighbor_transform_candidates` | `mapping/seams.py` | Migrated; V4 names remain compatibility wrappers |
-| `seam_matrix_error`, `fit_neighbor_to_constraints`, `fit_neighbor` | `mapping/seams.py` | Facade |
+| `seam_matrix_error`, `fit_neighbor_to_constraints`, `fit_neighbor` | `mapping/seams.py` | Migrated; V4 names remain compatibility wrappers |
 | `transformed_entry_bounds`, `snap_lower_curved_strips_to_grid`, `position_components`, `atlas_seam_pairs`, `edge_direction_matches`, `add_logical_seam_overrides`, `seam_override` | `mapping/seams.py` | Facade; pattern-size dependency pending removal |
 | `mapped_vertex`, `split_carrier_triangle`, `tessellated_carrier`, `entry_contains_logical`, `regular_curved_carrier`, `midpoint_vertex`, `weld_logical_nodes`, `refine_conforming_round`, `conforming_carrier` | `mapping/carrier.py` | Facade |
 | `validate_logical_seams`, `triangle_edge_key`, `third_point_2d`, `cycle_seam_pairs`, `rotate_component`, `close_periodic_component`, `unfold_carrier` | seams and carrier internals | Facade |

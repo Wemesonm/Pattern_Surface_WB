@@ -329,66 +329,18 @@ def neighbor_transform_candidates(placed, target, placed_edge, target_edge):
 
 
 def seam_matrix_error(placed, target, placed_edge, target_edge, matrix):
-    ppoints, tpoints = aligned_edge_samples(placed_edge, target_edge)
-    count = min(len(ppoints), len(tpoints))
-    if count <= 0:
-        return None
-    errors = []
-    for index in range(count):
-        pi = int(round(index * (len(ppoints) - 1) / max(count - 1, 1)))
-        ti = int(round(index * (len(tpoints) - 1) / max(count - 1, 1)))
-        lp = apply_transform(placed, local_xy_raw(placed, ppoints[pi]))
-        lt = apply_matrix(matrix, local_xy_raw(target, tpoints[ti]))
-        errors.append(math.hypot(lp[0] - lt[0], lp[1] - lt[1]))
-    return max(errors) if errors else None
+    from ..mapping.seams import seam_matrix_error as implementation
+    return implementation(placed, target, placed_edge, target_edge, matrix)
 
 
 def fit_neighbor_to_constraints(target, constraints):
-    """Place a face by minimizing error against every already positioned seam."""
-    if not constraints:
-        return None
-    if len(constraints) == 1:
-        placed, placed_edge, target_edge = constraints[0]
-        candidates = neighbor_transform_candidates(placed, target, placed_edge, target_edge)
-        if not candidates:
-            return None
-        candidates.sort(key=lambda item: item[0])
-        target["transform"] = candidates[0][1]
-        curved_seam = (not isinstance(placed["face"].Surface, Part.Plane) or
-                       not isinstance(target["face"].Surface, Part.Plane))
-        if curved_seam:
-            return 0.0 if candidates[0][0] < 1000.0 else candidates[0][0]
-        error = seam_matrix_error(placed, target, placed_edge, target_edge, candidates[0][1])
-        return error
-    candidates = []
-    seen = set()
-    for placed, placed_edge, target_edge in constraints:
-        for side_penalty, matrix in neighbor_transform_candidates(placed, target, placed_edge, target_edge):
-            key = tuple(round(value, 8) for value in matrix)
-            if key in seen:
-                continue
-            seen.add(key)
-            max_error = 0.0
-            total_error = side_penalty
-            valid = True
-            for other, other_edge, this_edge in constraints:
-                error = seam_matrix_error(other, target, other_edge, this_edge, matrix)
-                if error is None:
-                    valid = False
-                    break
-                max_error = max(max_error, error)
-                total_error += error
-            if valid:
-                candidates.append((total_error, max_error, matrix))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda item: item[0])
-    target["transform"] = candidates[0][2]
-    return candidates[0][1]
+    from ..mapping.seams import fit_neighbor_to_constraints as implementation
+    return implementation(target, constraints)
 
 
 def fit_neighbor(placed, target, placed_edge, target_edge):
-    return fit_neighbor_to_constraints(target, [(placed, placed_edge, target_edge)])
+    from ..mapping.seams import fit_neighbor as implementation
+    return implementation(placed, target, placed_edge, target_edge)
 
 
 def build_graph(entries):
