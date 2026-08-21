@@ -304,78 +304,28 @@ def point_from_logical(entry, logical):
 
 
 def edge_samples(edge, spacing=MAX_EDGE):
-    count = max(3, int(math.ceil(max(edge.Length, spacing) / spacing)) + 1)
-    return list(edge.discretize(Number=count))
+    from ..mapping.seams import edge_samples as implementation
+    return implementation(edge, spacing)
 
 
 def apply_matrix(matrix, local):
-    return [matrix[0] * local[0] + matrix[1] * local[1] + matrix[4],
-            matrix[2] * local[0] + matrix[3] * local[1] + matrix[5]]
+    from ..mapping.seams import apply_matrix as implementation
+    return implementation(matrix, local)
 
 
 def aligned_edge_samples(left_edge, right_edge):
-    ppoints = edge_samples(left_edge, max(MAX_EDGE, left_edge.Length / 16.0))
-    tpoints = edge_samples(right_edge, max(MAX_EDGE, right_edge.Length / 16.0))
-    if ppoints[0].distanceToPoint(tpoints[0]) > ppoints[0].distanceToPoint(tpoints[-1]):
-        tpoints.reverse()
-    return ppoints, tpoints
+    from ..mapping.seams import aligned_edge_samples as implementation
+    return implementation(left_edge, right_edge)
 
 
 def seam_limit(left_entry, right_entry, left_edge, right_edge):
-    limit = 0.05
-    if (not isinstance(left_entry["face"].Surface, Part.Plane) or
-            not isinstance(right_entry["face"].Surface, Part.Plane)):
-        limit = max(limit, min(left_edge.Length, right_edge.Length) * 0.35)
-    return limit
+    from ..mapping.seams import seam_limit as implementation
+    return implementation(left_entry, right_entry, left_edge, right_edge)
 
 
 def neighbor_transform_candidates(placed, target, placed_edge, target_edge):
-    ppoints, tpoints = aligned_edge_samples(placed_edge, target_edge)
-    p0 = apply_transform(placed, local_xy_raw(placed, ppoints[0]))
-    p1 = apply_transform(placed, local_xy_raw(placed, ppoints[-1]))
-    t0 = local_xy_raw(target, tpoints[0])
-    t1 = local_xy_raw(target, tpoints[-1])
-    sx, sy = t1[0] - t0[0], t1[1] - t0[1]
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    sl, dl = math.hypot(sx, sy), math.hypot(dx, dy)
-    curved_seam = (not isinstance(placed["face"].Surface, Part.Plane) or
-                   not isinstance(target["face"].Surface, Part.Plane))
-    if sl <= 1.0e-8 or dl <= 1.0e-8:
-        return []
-    metric_error = abs(sl - dl) / max(sl, dl)
-    if metric_error > 0.05 and not curved_seam:
-        return []
-    tangent_scale = dl / sl if curved_seam else 1.0
-    if curved_seam and abs(dl - sl) > 0.05:
-        console("wrap_v4: emenda_curva_escala_tangencial {} <-> {} sl={:.4f} dl={:.4f} escala={:.6f}".format(
-            placed["sub"], target["sub"], sl, dl, tangent_scale))
-    # Map the target seam basis onto the placed seam basis.  Curved strips can
-    # have a different logical length when their metric is sampled away from
-    # the shared boundary (for example, a toroidal fillet with changing
-    # radius).  Scale only along the seam; preserving the perpendicular basis
-    # keeps an already aligned side seam unchanged.
-    sux, suy = sx / sl, sy / sl
-    dux, duy = dx / dl, dy / dl
-    direct = [tangent_scale * dux * sux + duy * suy,
-              tangent_scale * dux * suy - duy * sux,
-              tangent_scale * duy * sux - dux * suy,
-              tangent_scale * duy * suy + dux * sux]
-    reflected = [tangent_scale * dux * sux - duy * suy,
-                 tangent_scale * dux * suy + duy * sux,
-                 tangent_scale * duy * sux + dux * suy,
-                 tangent_scale * duy * suy - dux * sux]
-    candidates = []
-    placed_center = apply_transform(placed, [placed["width"] * 0.5, placed["height"] * 0.5])
-    for linear in (direct, reflected):
-        tx = p0[0] - linear[0] * t0[0] - linear[1] * t0[1]
-        ty = p0[1] - linear[2] * t0[0] - linear[3] * t0[1]
-        matrix = linear + [tx, ty]
-        center = apply_matrix(matrix, [target["width"] * 0.5, target["height"] * 0.5])
-        seam_cross_a = dx * (placed_center[1] - p0[1]) - dy * (placed_center[0] - p0[0])
-        seam_cross_b = dx * (center[1] - p0[1]) - dy * (center[0] - p0[0])
-        side_penalty = 0.0 if seam_cross_a * seam_cross_b < 0 else 1000.0
-        candidates.append((side_penalty, matrix))
-    return candidates
+    from ..mapping.seams import neighbor_transform_candidates as implementation
+    return implementation(placed, target, placed_edge, target_edge)
 
 
 def seam_matrix_error(placed, target, placed_edge, target_edge, matrix):
