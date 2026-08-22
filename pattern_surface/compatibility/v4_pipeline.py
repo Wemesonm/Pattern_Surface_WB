@@ -2402,25 +2402,33 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
         return [a[0] + (b[0] - a[0]) * i / count + (c[0] - a[0]) * j / count,
                 a[1] + (b[1] - a[1]) * i / count + (c[1] - a[1]) * j / count]
 
+    center = [sum(point[0] for point in canonical) / 3.0,
+              sum(point[1] for point in canonical) / 3.0]
+    center_value = map_context_point(center, context)
+    if center_value is None or center_value[1] is None:
+        return None, None
+    center_normal = outside_normal_for_point(
+        center_value[0], center_value[1], source_solids)
+    if center_normal is None:
+        return None, None
+
+    def aligned_normal(raw_normal):
+        normal = norm(raw_normal)
+        if normal is None:
+            return None
+        return normal if normal.dot(center_normal) >= 0.0 else -normal
+
     for i in range(count + 1):
         for j in range(count + 1 - i):
             q = logical_node(i, j)
             mapped = map_context_point(q, context)
             if mapped is None or mapped[1] is None:
                 return None, None
-            normal = outside_normal_for_point(mapped[0], mapped[1], source_solids)
+            normal = aligned_normal(mapped[1])
             if normal is None:
                 return None, None
             nodes[(i, j)] = mapped[0] - normal * CONTACT
 
-    center = [sum(point[0] for point in canonical) / 3.0,
-              sum(point[1] for point in canonical) / 3.0]
-    center_value = map_context_point(center, context)
-    if center_value is None or center_value[1] is None:
-        return None, None
-    center_normal = outside_normal_for_point(center_value[0], center_value[1], source_solids)
-    if center_normal is None:
-        return None, None
     apex = apex_override if apex_override is not None else center_value[0] + center_normal * height
 
     rear_faces = []
@@ -2453,7 +2461,7 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
         mapped = map_context_point(q, context)
         if mapped is None or mapped[1] is None:
             return None
-        normal = outside_normal_for_point(mapped[0], mapped[1], source_solids)
+        normal = aligned_normal(mapped[1])
         if normal is None:
             return None
         return mapped[0] + normal * (height * ratio - CONTACT * (1.0 - ratio))

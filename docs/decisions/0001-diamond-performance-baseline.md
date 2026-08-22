@@ -26,6 +26,7 @@ diagnostics are temporary-compatible and do not change the generated object.
 
 - PAT-REQ-030
 - PAT-REQ-031
+- PAT-REQ-032
 
 ## Validation
 
