@@ -7,6 +7,7 @@ entry points call the public create_wrap/create_full_pattern/create_cut methods.
 import base64
 import json
 import math
+import time
 import traceback
 import zlib
 
@@ -2517,20 +2518,33 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
                 diamond_height=GRID_HEIGHT,
                 diamond_side=None,
                 periodic_phase=0.0,
-                allowed_ids=None, apex_records=None, source_shapes=None):
+                allowed_ids=None, apex_records=None, source_shapes=None,
+                perf_stats=None):
     # Eligibility is always evaluated against the real logical surface.  The
     # external mapper only completes a canonical cell that crosses its border;
     # it must never create detached rows made exclusively from ghost geometry.
+    timing_start = time.perf_counter()
     carriers = periodic_carriers(payload, list(payload["triangles"]))
+    if perf_stats is not None:
+        perf_stats["carrier_ms"] = (time.perf_counter() - timing_start) * 1000.0
     results, records, rejected = [], [], []
+    candidate_count = 0
+    eligible_count = 0
+    curved_count = 0
+    mapping_ms = 0.0
+    solid_ms = 0.0
     for triangle_id, canonical in canonical_triangles(
             payload["bounds"], extra=include_ghost, diamond_height=diamond_height,
             diamond_side=diamond_side, origin_x=periodic_phase):
+        candidate_count += 1
         if not canonical_periodic_representative(payload, canonical):
             continue
         if allowed_ids is not None and triangle_id not in allowed_ids:
             continue
+        eligible_count += 1
+        mapping_start = time.perf_counter()
         context, fragments = local_cell_context(payload, canonical, carriers, include_ghost)
+        mapping_ms += (time.perf_counter() - mapping_start) * 1000.0
         if not fragments:
             continue
         apex_override = v3(apex_records[triangle_id]) if apex_records and triangle_id in apex_records else None
@@ -2541,17 +2555,31 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
                 if shape is not None and shape not in source_solids:
                     source_solids.append(shape)
         solid = apex = None
-        if any(fragment["carrier"].get("curved", False) for fragment in fragments):
+        is_curved = any(fragment["carrier"].get("curved", False) for fragment in fragments)
+        if is_curved:
+            curved_count += 1
+        solid_start = time.perf_counter()
+        if is_curved:
             solid, apex = curved_row_pyramid_solid(
                 canonical, context, height, apex_override, source_solids)
         if solid is None:
             solid, apex = canonical_lattice_solid(
                 canonical, context, height, apex_override, source_solids)
+        solid_ms += (time.perf_counter() - solid_start) * 1000.0
         if solid is None:
             rejected.append(triangle_id)
             continue
         results.append(solid)
         records.append({"id": triangle_id, "canonical": canonical, "apex": xyz(apex)})
+    if perf_stats is not None:
+        perf_stats.update({
+            "candidates": candidate_count,
+            "eligible": eligible_count,
+            "curved": curved_count,
+            "mapping_ms": mapping_ms,
+            "solid_ms": solid_ms,
+            "rejected": len(rejected),
+        })
     return results, records, rejected
 
 
@@ -2716,6 +2744,7 @@ def source_solids_by_face(doc, payload):
 
 def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                         closure_fit_tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE):
+    total_start = time.perf_counter()
     doc = App.ActiveDocument
     if doc is None:
         fail("Abra um documento antes de executar o Diamond Pattern.")
@@ -2742,16 +2771,21 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                 fit.get("adjustment", 0.0), fit.get("tolerance", 0.0)))
     diamond_side = float(fit["effective_side"])
     periodic_phase = float(fit.get("periodic_phase", 0.0))
+    perf_stats = {}
+    build_start = time.perf_counter()
     solids, records, rejected = build_cells(
         payload, True, height=height, diamond_height=diamond_height,
         diamond_side=diamond_side, periodic_phase=periodic_phase,
-        source_shapes=source_solids_by_face(doc, payload))
+        source_shapes=source_solids_by_face(doc, payload), perf_stats=perf_stats)
+    perf_stats["build_ms"] = (time.perf_counter() - build_start) * 1000.0
     if not solids:
         fail("Diamond Pattern nao gerou solidos validos.")
     name = next_name(doc, FULL_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = short_label(PATTERN_LABEL, name)
+    compound_start = time.perf_counter()
     run.Shape = Part.makeCompound(solids)
+    perf_stats["compound_ms"] = (time.perf_counter() - compound_start) * 1000.0
     add_string(run, "DiamondPatternVersion", "Pattern Full From Wrap V4", "Diamond Pattern V4")
     add_string(run, "DiamondPatternAlgorithm", "WRAP_CARRIER_V4_FULL", "Diamond Pattern V4")
     add_string(run, "DiamondPatternWrapSource", wrap.Name, "Diamond Pattern V4")
@@ -2781,11 +2815,18 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                    "periodic_phase": periodic_phase,
                }},
                "Diamond Pattern V4")
+    recompute_start = time.perf_counter()
     doc.recompute()
+    perf_stats["recompute_ms"] = (time.perf_counter() - recompute_start) * 1000.0
+    perf_stats["total_ms"] = (time.perf_counter() - total_start) * 1000.0
     console("pattern_full_v4: run={} diamond_height={:.3f} diamond_side={:.6f} "
             "closure_adjustment={:.6f} pyramid_height={:.3f} solids={} rejected={}".format(
                 name, diamond_height, diamond_side, fit.get("adjustment", 0.0),
                 height, len(solids), len(rejected)))
+    console("pattern_full_v4: timing_ms carriers={carrier_ms:.1f} mapping={mapping_ms:.1f} "
+            "solids={solid_ms:.1f} build={build_ms:.1f} compound={compound_ms:.1f} "
+            "recompute={recompute_ms:.1f} total={total_ms:.1f} candidates={candidates} "
+            "eligible={eligible} curved={curved}".format(**perf_stats))
     if rejected:
         warn("pattern_full_v4: celulas_rejeitadas={}".format(",".join(rejected)))
     return run

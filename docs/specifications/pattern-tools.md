@@ -96,6 +96,17 @@ exactly with BRep corner transitions. This epsilon changes only lattice origin,
 not triangle height, effective side, module count, or closure. Store and reuse
 the phase in trimming fallbacks.
 
+## Performance Diagnostics
+
+`PAT-REQ-030` **Implemented as diagnostics** - Diamond generation reports elapsed
+time for carrier preparation, cell mapping, solid construction, compound assembly,
+and document recompute. Diagnostic output must not alter geometry, tolerances,
+cell eligibility, fallback order, or object properties.
+
+`PAT-REQ-031` **Pending optimization** - Performance improvements must target a
+measured stage, preserve the approved cell counts and rejected-cell behavior, and
+be validated on both straight and curved faces before approval.
+
 ## V4 Diamond Migration Ledger
 
 | Functions | Destination | Current status |
