@@ -107,7 +107,7 @@ cell eligibility, fallback order, or object properties.
 measured stage, preserve the approved cell counts and rejected-cell behavior, and
 be validated on both straight and curved faces before approval.
 
-`PAT-REQ-032` **Experimental** - Curved Diamond cells may resolve the outward
+`PAT-REQ-032` **Implemented in 0.1.7** - Curved Diamond cells may resolve the outward
 normal orientation once at the cell center and align local carrier normals to
 that reference. This optimization is acceptable only if the approved fixture
 retains its solid count, rejected-cell count, closure, and visual boundary.

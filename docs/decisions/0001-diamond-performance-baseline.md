@@ -1,6 +1,6 @@
 # Diamond Performance Baseline
 
-Status: Accepted
+Status: Accepted; superseded by approved optimization checkpoint `ad0bf1e`
 
 Date: 2026-08-22
 
@@ -13,14 +13,15 @@ geometry must remain the rollback point while the bottleneck is identified.
 
 ## Decision
 
-Treat commit `6882429` as the approved pre-optimization Map Faces baseline. Add
-stage timing diagnostics to the Diamond generation path before changing any
-geometry or fallback behavior.
+Treat commit `6882429` as the approved pre-optimization Map Faces baseline. The
+approved optimization checkpoint `ad0bf1e` reuses the cell-center outward
+normal orientation for curved cells and preserves the approved result.
 
 ## Consequences
 
-The next FreeCAD run will report timings and cell counts in the Report View. The
-diagnostics are temporary-compatible and do not change the generated object.
+The current approved run reports approximately 46.3 seconds, 192 solids, and
+zero rejected cells on the tested Small Box. The diagnostics remain available
+for the next isolated optimization.
 
 ## Affected requirements
 
