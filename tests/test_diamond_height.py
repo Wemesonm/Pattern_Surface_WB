@@ -5,7 +5,7 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).parents[1]
-ENGINE = ROOT / "pattern_surface/compatibility/v4_pipeline.py"
+ENGINE = ROOT / "pattern_surface/core_engine.py"
 
 
 class DiamondHeightTests(unittest.TestCase):
@@ -34,7 +34,7 @@ class DiamondHeightTests(unittest.TestCase):
         self.assertIn("ClosureFitTolerance", parameters.CLOSURE_FIT_TOLERANCE_KEY)
 
     def test_canonical_diamond_height_is_configurable(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         _cell_id, triangle = next(engine.canonical_triangles(
             [0.0, 30.0, 0.0, 30.0], extra=False, diamond_height=9.0))
@@ -42,7 +42,7 @@ class DiamondHeightTests(unittest.TestCase):
         self.assertAlmostEqual(9.0, max(ys) - min(ys), places=6)
 
     def test_canonical_side_can_fit_without_changing_height(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         _cell_id, triangle = next(engine.canonical_triangles(
             [0.0, 30.0, 0.0, 30.0], extra=False,
@@ -53,7 +53,7 @@ class DiamondHeightTests(unittest.TestCase):
         self.assertAlmostEqual(12.0, max(ys) - min(ys), places=6)
 
     def test_periodic_fit_uses_user_tolerance(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         natural_side = 2.0 * 12.0 / math.sqrt(3.0)
         period = natural_side * 24.0 - 0.15
@@ -69,7 +69,7 @@ class DiamondHeightTests(unittest.TestCase):
         self.assertFalse(rejected["adjusted"])
 
     def test_periodic_carrier_is_available_across_both_sides(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         payload = self._periodic_payload(100.0)
         carriers = engine.periodic_carriers(payload, payload["triangles"])

@@ -1,7 +1,7 @@
-"""Shared geometric core for the Wrap Faces V4 FreeCAD macros.
+"""Shared geometry engine for the Auzyron Patterns workbench.
 
-This module intentionally contains no automatic execution.  The three FCMacro
-entry points call the public create_wrap/create_full_pattern/create_cut methods.
+This module intentionally contains no automatic execution.  Map Faces, Pattern Tools, and Trim Surface call the public
+create_wrap/create_full_pattern/create_cut methods.
 """
 
 import base64

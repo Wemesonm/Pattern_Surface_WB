@@ -4,7 +4,7 @@ from unittest import mock
 
 import FreeCAD as App
 
-from pattern_surface.compatibility import v4_pipeline as core
+from pattern_surface import core_engine as core
 
 
 ROOT = pathlib.Path(__file__).parents[1]
@@ -21,7 +21,7 @@ class TrimEquivalenceTests(unittest.TestCase):
             App.closeDocument(document.Name)
 
     def test_trim_reads_stored_height(self):
-        source = (ROOT / "pattern_surface/compatibility/v4_pipeline.py").read_text(encoding="utf-8")
+        source = (ROOT / "pattern_surface/core_engine.py").read_text(encoding="utf-8")
         self.assertIn('getattr(pattern, "PatternHeight"', source)
         self.assertIn("exact_face_cut_envelope(entry, pattern_height)", source)
 

@@ -4,7 +4,7 @@ import math
 
 import Part
 
-from ..compatibility.v4_pipeline import interpolate_vertex
+from ..core_engine import interpolate_vertex
 from .parameters import DEFAULT_COLUMN_WIDTH, DEFAULT_ROW_HEIGHT
 
 

@@ -4,8 +4,8 @@ from ..common.selection_core import selected_faces as collect_selected_faces
 
 
 def _core():
-    from ..compatibility import v4_pipeline
-    return v4_pipeline
+    from .. import core_engine
+    return core_engine
 
 
 def selected_faces():

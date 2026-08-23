@@ -1,4 +1,4 @@
-from ...compatibility import v4_pipeline
+from ... import core_engine
 from ...common.runtime import maybe_reload
 
 
@@ -14,7 +14,7 @@ def _map_run(map_object):
 
 
 def analyze_closure_fit(map_object, parameters):
-    module = maybe_reload(v4_pipeline)
+    module = maybe_reload(core_engine)
     run = _map_run(map_object)
     if run is None:
         return {"adjusted": False}
@@ -27,8 +27,8 @@ def analyze_closure_fit(map_object, parameters):
 
 
 def create_pattern(map_object, parameters):
-    del map_object  # Selection remains authoritative during V4 compatibility.
-    module = maybe_reload(v4_pipeline)
+    del map_object  # Selection remains authoritative during shared geometry engine.
+    module = maybe_reload(core_engine)
     return module.run_guard(
         lambda: module.create_full_pattern(
             height=parameters["pyramid_height"],

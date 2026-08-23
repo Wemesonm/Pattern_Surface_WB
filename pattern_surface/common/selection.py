@@ -1,5 +1,5 @@
 from .selection_core import selected_faces
-from ..compatibility.v4_pipeline import (
+from ..core_engine import (
     hydrate_entries, resolve_cut_selection, resolve_wrap_selection)
 
 __all__ = [

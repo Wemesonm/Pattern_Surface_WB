@@ -5,7 +5,7 @@ import unittest
 class ImportTests(unittest.TestCase):
     def test_runtime_modules_import(self):
         modules = (
-            "pattern_surface.compatibility.v4_pipeline",
+            "pattern_surface.core_engine",
             "pattern_surface.mapping.parameters",
             "pattern_surface.mapping.service",
             "pattern_surface.patterns.registry",

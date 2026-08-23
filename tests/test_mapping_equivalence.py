@@ -7,7 +7,7 @@ import FreeCAD as App
 
 ROOT = pathlib.Path(__file__).parents[1]
 ORIGINAL = ROOT / "archive/v4_original/Wrap_pipeline_V4_core.py"
-ENGINE = ROOT / "pattern_surface/compatibility/v4_pipeline.py"
+ENGINE = ROOT / "pattern_surface/core_engine.py"
 PREVIEW = ROOT / "pattern_surface/mapping/preview.py"
 
 
@@ -42,7 +42,7 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_generic_grid_uses_independent_centered_axes(self):
         # MAP-REQ-023, MAP-REQ-024, MAP-REQ-025.
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         self.assertEqual([-5.0, 5.0], engine.grid_line_values(-6.0, 8.0, 5.0, 10.0))
         self.assertEqual([-3.0, 3.0, 9.0], engine.grid_line_values(-4.0, 10.0, 3.0, 6.0))
@@ -57,7 +57,7 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_cycle_seam_is_the_edge_excluded_from_atlas_tree(self):
         # MAP-REQ-027: face indices do not identify the opened atlas seam.
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         group = [{"index": index} for index in range(4)]
         graph = {
@@ -74,7 +74,7 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_periodic_grid_phase_includes_period_boundary(self):
         # MAP-REQ-028: periodic closure is a grid boundary, not a double cell.
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         self.assertEqual(
             [0.0, 10.0, 20.0, 30.0, 40.0],
@@ -89,7 +89,7 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_preview_is_owned_by_mapping_package(self):
         # MAP-REQ-029: preview generation is not implemented in the V4
-        # compatibility module anymore.
+        # shared geometry engine anymore.
         source = PREVIEW.read_text(encoding="utf-8")
         self.assertIn("def carrier_preview", source)
         self.assertIn("def preview_line_edges", source)
@@ -97,7 +97,7 @@ class MappingEquivalenceTests(unittest.TestCase):
 
     def test_invalid_grid_dimensions_are_rejected(self):
         # MAP-REQ-010: public callers receive the same positive-length guard.
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         for values in ((0.0, 12.0, 0.05), (10.0, -1.0, 0.05),
                        (10.0, 12.0, float("inf"))):
@@ -106,7 +106,7 @@ class MappingEquivalenceTests(unittest.TestCase):
                     engine.validate_map_grid(*values)
 
     def test_periodic_seam_parameters_stay_in_trimmed_intervals(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         document = App.openDocument(str(ROOT / "tests/fixtures/container_four_faces.FCStd"))
         try:
@@ -123,7 +123,7 @@ class MappingEquivalenceTests(unittest.TestCase):
             App.closeDocument(document.Name)
 
     def test_curved_face_with_two_neighbors_keeps_both_seams_aligned(self):
-        from pattern_surface.compatibility import v4_pipeline as engine
+        from pattern_surface import core_engine as engine
 
         document = App.openDocument(str(ROOT / "tests/fixtures/container_four_faces.FCStd"))
         try:

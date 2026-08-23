@@ -1,4 +1,4 @@
-from ...compatibility.v4_pipeline import (
+from ...core_engine import (
     canonical_triangles,
     clip_polygon,
     clipped_cell_fragments,

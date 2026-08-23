@@ -58,7 +58,7 @@ When a change crosses tool boundaries, read every affected specification.
 | `pattern_surface/mapping/` | Map Faces implementation only. |
 | `pattern_surface/patterns/` | Pattern registry and independent pattern packages. |
 | `pattern_surface/trimming/` | Generic Trim Surface implementation only. |
-| `pattern_surface/compatibility/v4_pipeline.py` | Transitional V4 engine; remove only after extracted equivalence tests pass. |
+| `pattern_surface/core_engine.py` | Shared geometry engine; reduce to owned mapping, Diamond, and trimming modules as equivalence tests pass. |
 | `tests/fixtures/` | Versioned FreeCAD regression documents. |
 | `archive/` | Immutable macro baselines and experiments. |
 

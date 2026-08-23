@@ -3,7 +3,7 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).parents[1]
-ENGINE = ROOT / "pattern_surface/compatibility/v4_pipeline.py"
+ENGINE = ROOT / "pattern_surface/core_engine.py"
 
 
 class DiamondEquivalenceTests(unittest.TestCase):

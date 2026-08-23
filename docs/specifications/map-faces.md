@@ -48,7 +48,7 @@ detect contradictory cycles.
 ## V4 Mapping Migration Ledger
 
 The following V4 functions belong to Map Faces. `Facade` means the active
-implementation still resides in `compatibility/v4_pipeline.py` and is re-exported
+implementation still resides in `core_engine.py` and is re-exported
 or called by a modular file.
 
 | Functions | Destination | Current status |
@@ -272,7 +272,7 @@ while old documents and commands depend on them.
 - Broader periodic-cycle fixtures are still required.
 - Inner-contour adjacency and physical hole clipping are deferred.
 - Cycle closure is diagnosed but never optimized by deforming the map.
-- The active implementation remains partly inside the transitional V4 engine.
+- The active implementation remains partly inside the shared geometry engine.
 
 ## Acceptance Tests
 

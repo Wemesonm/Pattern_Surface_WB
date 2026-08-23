@@ -11,7 +11,7 @@ import FreeCADGui as Gui
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pattern_surface.compatibility import v4_pipeline as engine
+from pattern_surface import core_engine as engine
 
 
 FIXTURE = ROOT / "tests/fixtures/container_four_faces.FCStd"

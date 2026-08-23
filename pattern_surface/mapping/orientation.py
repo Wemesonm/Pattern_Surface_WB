@@ -2,8 +2,8 @@
 
 
 def _core():
-    from ..compatibility import v4_pipeline
-    return v4_pipeline
+    from .. import core_engine
+    return core_engine
 
 
 def tangent(face, bounds, axis):

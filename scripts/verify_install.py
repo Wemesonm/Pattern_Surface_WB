@@ -10,7 +10,7 @@ REQUIRED = (
     "InitGui.py",
     "package.xml",
     "pattern_surface/workbench.py",
-    "pattern_surface/compatibility/v4_pipeline.py",
+    "pattern_surface/core_engine.py",
 )
 
 

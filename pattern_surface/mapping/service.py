@@ -4,9 +4,9 @@ from . import engine as map_engine
 from . import parameters
 
 
-def compatibility_engine():
-    from ..compatibility import v4_pipeline
-    module = maybe_reload(v4_pipeline)
+def geometry_engine():
+    from .. import core_engine
+    module = maybe_reload(core_engine)
     module.BUILD_ID = BUILD_ID
     return module
 
@@ -17,6 +17,6 @@ def create_map(options=None):
         options = parameters.get_parameters()
     if options is None:
         return None
-    module = compatibility_engine()
+    module = geometry_engine()
     return module.run_guard(
         lambda: map_engine.create_map(**options), "Map Faces")

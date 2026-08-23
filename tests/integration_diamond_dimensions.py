@@ -8,7 +8,7 @@ import FreeCAD as App
 ROOT = pathlib.Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pattern_surface.compatibility import v4_pipeline as engine
+from pattern_surface import core_engine as engine
 
 
 class SelectionHarness:

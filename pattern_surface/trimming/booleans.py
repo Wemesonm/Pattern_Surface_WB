@@ -1,4 +1,4 @@
-from ..compatibility.v4_pipeline import (
+from ..core_engine import (
     build_cut_cells,
     build_cut_cells_from_full,
     physical_cut_piece,

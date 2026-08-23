@@ -182,7 +182,7 @@ and total closure adjustment.
 ## Known Limitations and Deferred Work
 
 - Diamond is the only registered pattern.
-- Diamond still delegates substantial geometry to the transitional V4 engine.
+- Diamond still delegates substantial geometry to the shared geometry engine.
 - Pattern behavior around internal holes relies on future Trim Surface work.
 - Removing the legacy Diamond dimension field requires a schema migration.
 

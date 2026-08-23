@@ -1,4 +1,4 @@
-from ..compatibility.v4_pipeline import (
+from ..core_engine import (
     conforming_carrier,
     entry_contains_logical,
     external_segments,

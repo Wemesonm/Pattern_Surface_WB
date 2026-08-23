@@ -4,9 +4,9 @@ import math
 
 
 def _core():
-    # Kept lazy while V4 compatibility remains the temporary geometry source.
-    from ..compatibility import v4_pipeline
-    return v4_pipeline
+    # Kept lazy while shared geometry engine remains the temporary geometry source.
+    from .. import core_engine
+    return core_engine
 
 
 def surface_period(surface, axis):

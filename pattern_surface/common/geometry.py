@@ -1,4 +1,4 @@
-from ..compatibility.v4_pipeline import (
+from ..core_engine import (
     area2,
     average_vector,
     barycentric,

@@ -116,8 +116,8 @@ in `data-contracts.md`; do not rewrite source objects merely by reading them.
 
 ## Known Limitations and Deferred Work
 
-- Current envelopes and fallbacks remain partly in the transitional V4 engine.
-- The primary boundary-preservation rule is pattern-independent, but the V4
+- Current envelopes and fallbacks remain partly in the shared geometry engine.
+- The primary boundary-preservation rule is pattern-independent, but the legacy
   compatibility facade still reads `DiamondPatternCellChunks`, Diamond
   dimension aliases, and uses a Diamond-specific reconstruction fallback.
   Before a second pattern is registered, move the canonical-cell payload and
