@@ -126,10 +126,9 @@ stored in FreeCAD preferences and written to the pattern payload.
 local normal using deterministic seed-based noise. Shared logical vertices use
 the same value so neighboring carrier triangles remain aligned.
 
-`PAT-REQ-043` **Known limitation** - The initial implementation creates a
-displaced carrier surface representation. A watertight thickened/print-ready
-representation is deferred until its performance and boolean behavior are
-specified separately.
+`PAT-REQ-043` **Experimental** - The initial implementation creates a closed
+thin surface layer from the displaced carrier. Full fusion with the source
+solid and slicer-specific printability validation remain deferred.
 
 ## V4 Diamond Migration Ledger
 
