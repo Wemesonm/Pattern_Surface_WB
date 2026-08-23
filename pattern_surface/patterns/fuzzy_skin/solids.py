@@ -33,9 +33,10 @@ def _noise(point, feature_size, variation, seed):
     return (1.0 - variation) + variation * unit
 
 
-def _vertex(vertex, depth, feature_size, variation, seed):
+def _vertex(vertex, depth, feature_size, variation, seed, normal_override=None):
     point = App.Vector(*[float(value) for value in vertex["p"]])
-    normal = App.Vector(*[float(value) for value in vertex.get("n", [0.0, 0.0, 1.0])])
+    normal = (normal_override or
+              App.Vector(*[float(value) for value in vertex.get("n", [0.0, 0.0, 1.0])]))
     if normal.Length <= 1.0e-12:
         return point
     normal.normalize()
@@ -47,11 +48,32 @@ def _point_key(point):
     return tuple(round(float(value), 7) for value in point)
 
 
-def _closed_surface_layer(triangles, parameters):
+def _outward_normal(point, raw_normal, source_shape):
+    normal = App.Vector(*[float(value) for value in raw_normal])
+    if normal.Length <= 1.0e-12:
+        return None
+    normal.normalize()
+    if source_shape is None or not hasattr(source_shape, "isInside"):
+        return normal
+    for distance in (0.08, 0.35, 0.80):
+        plus = point + normal * distance
+        minus = point - normal * distance
+        try:
+            plus_inside = bool(source_shape.isInside(plus, 1.0e-6, False))
+            minus_inside = bool(source_shape.isInside(minus, 1.0e-6, False))
+        except Exception:
+            continue
+        if plus_inside != minus_inside:
+            return -normal if plus_inside else normal
+    return normal
+
+
+def _closed_surface_layer(triangles, parameters, source_shapes):
     """Build one watertight thin layer from the carrier topology."""
     vertices = {}
     edges = {}
     triangle_keys = []
+    normal_cache = {}
     for triangle in triangles:
         source = triangle.get("v", [])
         if len(source) != 3:
@@ -60,11 +82,20 @@ def _closed_surface_layer(triangles, parameters):
         for vertex in source:
             key = _point_key(vertex["p"])
             if key not in vertices:
+                point = App.Vector(*[float(value) for value in vertex["p"]])
+                source_shape = source_shapes.get(triangle.get("face"))
+                normal = normal_cache.get(key)
+                if normal is None:
+                    normal = _outward_normal(
+                        point, vertex.get("n", [0.0, 0.0, 1.0]), source_shape)
+                    normal_cache[key] = normal
+                if normal is None:
+                    continue
                 vertices[key] = {
-                    "base": App.Vector(*[float(value) for value in vertex["p"]]),
+                    "base": point,
                     "top": _vertex(vertex, parameters["depth"],
                                    parameters["feature_size"],
-                                   parameters["variation"], parameters["seed"]),
+                                   parameters["variation"], parameters["seed"], normal),
                 }
             keys.append(key)
         triangle_keys.append(keys)
@@ -135,7 +166,14 @@ def create_pattern(parameters):
         selected_triangles.append(triangle)
         cells.append({"id": index, "carrier": triangle.get("id", index)})
 
-    solid, face_count = _closed_surface_layer(selected_triangles, parameters)
+    source_shapes = {}
+    for record in payload.get("faces", []):
+        source = doc.getObject(record.get("object", ""))
+        shape = getattr(source, "Shape", None) if source is not None else None
+        if shape is not None and not shape.isNull():
+            source_shapes[record.get("index")] = shape
+    solid, face_count = _closed_surface_layer(
+        selected_triangles, parameters, source_shapes)
     if solid is None:
         raise RuntimeError(
             "O Fuzzy Skin nao formou uma camada fechada valida. "
