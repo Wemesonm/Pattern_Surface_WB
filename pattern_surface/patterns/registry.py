@@ -10,6 +10,11 @@ def patterns():
         "label": "Diamond Pattern",
         "command_id": "PatternSurface_Pattern_Diamond",
         "icon": os.path.join(root, "resources", "icons", "diamond.svg"),
+    }), validate_descriptor({
+        "pattern_id": "fuzzy_skin",
+        "label": "Fuzzy Skin Pattern",
+        "command_id": "PatternSurface_Pattern_FuzzySkin",
+        "icon": os.path.join(root, "resources", "icons", "fuzzy_skin.svg"),
     })]
 
 
