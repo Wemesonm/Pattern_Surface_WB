@@ -112,7 +112,7 @@ normal orientation once at the cell center and align local carrier normals to
 that reference. This optimization is acceptable only if the approved fixture
 retains its solid count, rejected-cell count, closure, and visual boundary.
 
-## V4 Diamond Migration Ledger
+## Diamond Migration Ledger
 
 | Functions | Destination | Current status |
 | --- | --- | --- |

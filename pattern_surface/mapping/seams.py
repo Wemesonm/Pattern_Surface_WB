@@ -56,7 +56,7 @@ def neighbor_transform_candidates(placed, target, placed_edge, target_edge):
         return []
     tangent_scale = dl / sl if curved_seam else 1.0
     if curved_seam and abs(dl - sl) > 0.05:
-        core.console("wrap_v4: emenda_curva_escala_tangencial {} <-> {} sl={:.4f} dl={:.4f} escala={:.6f}".format(
+        core.console("map_faces: emenda_curva_escala_tangencial {} <-> {} sl={:.4f} dl={:.4f} escala={:.6f}".format(
             placed["sub"], target["sub"], sl, dl, tangent_scale))
     sux, suy = sx / sl, sy / sl
     dux, duy = dx / dl, dy / dl

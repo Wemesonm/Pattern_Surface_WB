@@ -22,6 +22,7 @@ from ..common.identifiers import (
     MAP_LABEL,
     PATTERN_LABEL,
     SCHEMA,
+    is_supported_schema,
     TRIM_LABEL,
     WRAP_PREFIX,
     short_label,
@@ -396,7 +397,7 @@ def snap_lower_curved_strips_to_grid(group):
         if abs(delta) <= MAX_EDGE and abs(delta) > 1.0e-6:
             entry["transform"][4] += delta
             snapped += 1
-            console("wrap_v4: faixa_curva_inferior_snap_grid {} dx={:.4f} x0={:.4f}->{:.4f}".format(
+            console("map_faces: faixa_curva_inferior_snap_grid {} dx={:.4f} x0={:.4f}->{:.4f}".format(
                 entry["sub"], delta, bounds[0], target))
     return snapped
 
@@ -480,15 +481,15 @@ def position_components(entries, graph):
                         if pair != primary_pair:
                             ignored.append("{}<->{}".format(placed["sub"], neighbor["sub"]))
                     if ignored:
-                        console("wrap_v4: emenda_atlas_principal={} <-> {}; emendas_extras_ignoradas={}".format(
+                        console("map_faces: emenda_atlas_principal={} <-> {}; emendas_extras_ignoradas={}".format(
                             primary_placed["sub"], neighbor["sub"], ",".join(ignored)))
                     if primary_transform:
                         neighbor["transform"] = primary_transform
                 if error is None or error > limit:
-                    fail("Carrier V4 nao conseguiu posicionar a emenda {} <-> {} (erro {}).".format(
+                    fail("carrier nao conseguiu posicionar a emenda {} <-> {} (erro {}).".format(
                         primary_placed["sub"], neighbor["sub"], error))
                 if error > 0.05:
-                    warn("Carrier V4 aceitou emenda curva aproximada {} <-> {} erro={:.4f} limite={:.4f}.".format(
+                    warn("carrier aceitou emenda curva aproximada {} <-> {} erro={:.4f} limite={:.4f}.".format(
                         primary_placed["sub"], neighbor["sub"], error, limit))
                 primary_placed["atlas_seams"].add(primary_pair)
                 neighbor["atlas_seams"].add(primary_pair)
@@ -496,7 +497,7 @@ def position_components(entries, graph):
                 visited.add(neighbor_index)
                 queue.append(neighbor_index)
         if len(visited) != len(group):
-            fail("Componente V4 incompleto.")
+            fail("Componente incompleto.")
         # Move the complete logical component, not each face, to one common
         # lower-left origin.  This is the phase origin consumed by the pattern.
         xs, ys = [], []
@@ -569,7 +570,7 @@ def add_logical_seam_overrides(entries, graph, atlas_pairs=None):
                 neighbor["seam_overrides"].append({"pair": pair, "edge": other_edge, "qa": neighbor_b, "qb": neighbor_a})
             added += 1
     if added:
-        console("wrap_v4: emendas_logicas_fixadas={}".format(added))
+        console("map_faces: emendas_logicas_fixadas={}".format(added))
 
 
 def seam_override(entry, pair):
@@ -823,7 +824,7 @@ def conforming_carrier(entries):
     longest = max(v3(triangle["v"][index]["p"]).distanceToPoint(
         v3(triangle["v"][(index + 1) % 3]["p"]))
         for triangle in carrier for index in range(3))
-    console("wrap_v4: carrier_parametrico={} longest={:.4f} sag={:.4f}".format(
+    console("map_faces: carrier_parametrico={} longest={:.4f} sag={:.4f}".format(
         len(carrier), longest, SAG))
     return carrier
 
@@ -875,12 +876,12 @@ def validate_logical_seams(entries, graph, atlas_pairs=None):
                     not isinstance(neighbor["face"].Surface, Part.Plane)):
                 limit = max(limit, min(edge.Length, other_edge.Length) * 0.35)
             if error > limit:
-                fail("Emenda logica V4 {} <-> {} divergiu {:.4f} mm.".format(
+                fail("Emenda logica {} <-> {} divergiu {:.4f} mm.".format(
                     entry["sub"], neighbor["sub"], error))
             if error > 0.05:
-                warn("Emenda logica V4 curva aproximada {} <-> {} erro={:.4f} limite={:.4f}.".format(
+                warn("Emenda logica curva aproximada {} <-> {} erro={:.4f} limite={:.4f}.".format(
                     entry["sub"], neighbor["sub"], error, limit))
-    console("wrap_v4: emendas_logicas={} erro_max={:.4f}".format(len(checked), maximum))
+    console("map_faces: emendas_logicas={} erro_max={:.4f}".format(len(checked), maximum))
     return maximum
 
 
@@ -968,12 +969,12 @@ def close_periodic_component(vertices, triangle_indices, face_ids, seam_pairs):
     max_x = max(item["q"][0] for item in used)
     width = max_x - min_x
     if width <= 1.0e-8:
-        fail("Componente periodico V4 sem largura logica.")
+        fail("Componente periodico sem largura logica.")
     columns = max(1, int(round(width / GRID_SIDE)))
     target = columns * GRID_SIDE
     adjustment = (target - width) / width
     if abs(adjustment) > 0.05:
-        fail("Fechamento periodico V4 exige ajuste de {:.2f}% (limite 5%).".format(abs(adjustment) * 100.0))
+        fail("Fechamento periodico exige ajuste de {:.2f}% (limite 5%).".format(abs(adjustment) * 100.0))
     scale = target / width
     for item in used:
         item["q"][0] = min_x + (item["q"][0] - min_x) * scale
@@ -1005,7 +1006,7 @@ def unfold_carrier(triangles, groups, graph):
         face_ids = {item["index"] for item in group}
         members = [index for index, triangle in enumerate(triangles) if triangle["face"] in face_ids]
         if not members:
-            fail("Componente do carrier V4 sem triangulos.")
+            fail("Componente do carrier sem triangulos.")
         root = min(members, key=lambda index: (min(v3(item["p"]).z for item in triangles[index]["v"]),
                                                min(v3(item["p"]).x for item in triangles[index]["v"]), index))
         root_vertices = triangles[root]["v"]
@@ -1013,7 +1014,7 @@ def unfold_carrier(triangles, groups, graph):
         qa, qb = [0.0, 0.0], [pa.distanceToPoint(pb), 0.0]
         qc = third_point_2d(qa, qb, pa, pb, pc)
         if qc is None:
-            fail("Triangulo ancora degenerado no carrier V4.")
+            fail("Triangulo ancora degenerado no carrier.")
         root_vertices[0]["q"][:] = qa
         root_vertices[1]["q"][:] = qb
         root_vertices[2]["q"][:] = qc
@@ -1045,7 +1046,7 @@ def unfold_carrier(triangles, groups, graph):
                 candidate = third_point_2d(na["q"], nb["q"], v3(na["p"]), v3(nb["p"]), v3(nc["p"]),
                                            current["v"][third_current]["q"])
                 if candidate is None:
-                    fail("Falha ao desdobrar triangulo vizinho no carrier V4.")
+                    fail("Falha ao desdobrar triangulo vizinho no carrier.")
                 node_key = qkey3(v3(nc["p"]))
                 if node_key in logical_nodes:
                     mismatch = math.hypot(nc["q"][0] - candidate[0], nc["q"][1] - candidate[1])
@@ -1062,7 +1063,7 @@ def unfold_carrier(triangles, groups, graph):
                 queue.append(neighbor_index)
         missing = set(members) - placed
         if missing:
-            fail("Tessellacao V4 nao compartilha nos BReps: {} triangulos desconectados.".format(len(missing)))
+            fail("Tessellacao nao compartilha nos BReps: {} triangulos desconectados.".format(len(missing)))
         rotate_component([triangle["v"] for triangle in triangles], members)
         periodic = close_periodic_component([triangle["v"] for triangle in triangles], members,
                                             face_ids, seam_pairs)
@@ -1073,7 +1074,7 @@ def unfold_carrier(triangles, groups, graph):
         for item in component_vertices:
             item["q"][0] += component_offset
         component_offset = max(item["q"][0] for item in component_vertices) + GRID_SIDE * 2.0
-    console("wrap_v4: erro_fechamento_logico_max={:.4f}".format(maximum_closure_error))
+    console("map_faces: erro_fechamento_logico_max={:.4f}".format(maximum_closure_error))
     return seam_pairs, periodic_records
 
 
@@ -1199,7 +1200,7 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     if doc is None:
         fail("Abra um documento antes de executar Map Faces.")
     validate_map_grid(column_width, row_height, closure_tolerance)
-    console("wrap_v4: build={} file={}".format(BUILD_ID, __file__))
+    console("map_faces: build={} file={}".format(BUILD_ID, __file__))
     entries = selected_faces()
     for entry in entries:
         orient_entry(entry)
@@ -1212,12 +1213,12 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
         entry["seam_overrides"] = []
     triangles = conforming_carrier(entries)
     if not triangles:
-        fail("Carrier V4 nao gerou triangulos internos.")
+        fail("carrier nao gerou triangulos internos.")
     # The face transforms above are the authoritative atlas.  Do not unfold
     # tessellation triangles a second time: that creates overlapping logical
     # regions and switches support in the middle of canonical cells.
     seam_pairs = cycle_seam_pairs(groups, graph, atlas_pairs)
-    console("wrap_v4: emendas_periodicas_atlas={}".format(
+    console("map_faces: emendas_periodicas_atlas={}".format(
         ",".join("{}>{}".format(left + 1, right + 1)
                  for left, right in sorted(seam_pairs)) or "nenhuma"))
     periodic_records = []
@@ -1252,12 +1253,12 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = short_label(MAP_LABEL, name)
     run.Shape = Part.makeCompound([entry["face"] for entry in entries])
-    add_string(run, "WrapVersion", "Wrap Faces V4", "Wrap Faces V4")
-    add_string(run, "WrapAlgorithm", SCHEMA, "Wrap Faces V4")
-    add_string(run, "WrapReady", "True", "Wrap Faces V4")
-    add_string(run, "WrapSourceFaces", ";".join("{}|{}".format(e["object"].Name, e["sub"]) for e in entries), "Wrap Faces V4")
-    add_string(run, "WrapAdjacency", ";".join("{}>{}".format(a + 1, b + 1) for a, b in shared), "Wrap Faces V4")
-    add_chunks(run, "WrapCarrierChunks", payload, "Wrap Faces V4")
+    add_string(run, "WrapVersion", "Map Faces", "Legacy Map Properties")
+    add_string(run, "WrapAlgorithm", SCHEMA, "Legacy Map Properties")
+    add_string(run, "WrapReady", "True", "Legacy Map Properties")
+    add_string(run, "WrapSourceFaces", ";".join("{}|{}".format(e["object"].Name, e["sub"]) for e in entries), "Legacy Map Properties")
+    add_string(run, "WrapAdjacency", ";".join("{}>{}".format(a + 1, b + 1) for a, b in shared), "Legacy Map Properties")
+    add_chunks(run, "WrapCarrierChunks", payload, "Legacy Map Properties")
     add_string(run, "MapVersion", "1", "Pattern Surface")
     add_string(run, "MapAlgorithm", SCHEMA, "Pattern Surface")
     add_string(run, "MapReady", "True", "Pattern Surface")
@@ -1273,7 +1274,7 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     preview.Label = short_label(CARRIER_LABEL, name)
     preview.Shape = carrier_preview(
         triangles, bounds, column_width, row_height, grid_origin)
-    add_string(preview, "WrapParentRun", run.Name, "Wrap Faces V4")
+    add_string(preview, "WrapParentRun", run.Name, "Legacy Map Properties")
     add_string(preview, "MapParentRun", run.Name, "Pattern Surface")
     view = getattr(preview, "ViewObject", None)
     if view is not None:
@@ -1283,21 +1284,21 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     doc.recompute()
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(run)
-    console("wrap_v4: run={} faces={} carrier_triangles={}".format(name, len(entries), len(triangles)))
+    console("map_faces: run={} faces={} carrier_triangles={}".format(name, len(entries), len(triangles)))
     return run
 
 
 def resolve_wrap_selection(doc):
     for obj in Gui.Selection.getSelection():
-        if (getattr(obj, "MapAlgorithm", "") == SCHEMA or
-                getattr(obj, "WrapAlgorithm", "") == SCHEMA):
+        if (is_supported_schema(getattr(obj, "MapAlgorithm", "")) or
+                is_supported_schema(getattr(obj, "WrapAlgorithm", ""))):
             return obj
         parent = getattr(obj, "WrapParentRun", "")
         if parent:
             run = doc.getObject(parent)
-            if run is not None and getattr(run, "WrapAlgorithm", "") == SCHEMA:
+            if run is not None and is_supported_schema(getattr(run, "WrapAlgorithm", "")):
                 return run
-    fail("Selecione o objeto DiamondSurfaceWrap_V4_Run_... antes de executar esta macro.")
+    fail("Selecione um objeto Mapped Surface antes de executar esta ferramenta.")
 
 
 def hydrate_entries(doc, payload):
@@ -2645,7 +2646,7 @@ def exact_face_cut_envelope(entry, pattern_height):
             entry["cut_envelope"] = envelope
             return envelope
     except Exception as exc:
-        warn("cut_v4: envelope_offset_falhou face={} erro={}".format(entry.get("index", "?"), exc))
+        warn("trim: envelope_offset_falhou face={} erro={}".format(entry.get("index", "?"), exc))
 
     if not entry.get("planar", False):
         return None
@@ -2662,7 +2663,7 @@ def exact_face_cut_envelope(entry, pattern_height):
             entry["cut_envelope"] = envelope
             return envelope
     except Exception as exc:
-        warn("cut_v4: envelope_plano_falhou face={} erro={}".format(entry.get("index", "?"), exc))
+        warn("trim: envelope_plano_falhou face={} erro={}".format(entry.get("index", "?"), exc))
     return None
 
 
@@ -2674,7 +2675,7 @@ def fused_cut_envelopes(envelopes):
         try:
             result = result.fuse(envelope)
         except Exception as exc:
-            warn("cut_v4: envelope_fuse_falhou erro={}".format(exc))
+            warn("trim: envelope_fuse_falhou erro={}".format(exc))
             return None
     try:
         result = result.removeSplitter()
@@ -2691,7 +2692,7 @@ def physical_cut_piece(cell, combined_envelope, envelopes, index):
             if is_valid_shape(result):
                 pieces.extend(list(result.Solids))
         except Exception as exc:
-            warn("cut_v4: booleano_combinado_falhou celula={} erro={}".format(index, exc))
+            warn("trim: booleano_combinado_falhou celula={} erro={}".format(index, exc))
     if not pieces:
         for envelope in envelopes:
             try:
@@ -2699,7 +2700,7 @@ def physical_cut_piece(cell, combined_envelope, envelopes, index):
                 if is_valid_shape(result):
                     pieces.extend(list(result.Solids))
             except Exception as exc:
-                warn("cut_v4: booleano_face_falhou celula={} erro={}".format(index, exc))
+                warn("trim: booleano_face_falhou celula={} erro={}".format(index, exc))
     return pieces
 
 
@@ -2714,7 +2715,7 @@ def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_heigh
     full_solids = list(getattr(pattern.Shape, "Solids", []) or [])
     full_records = list(cell_payload.get("cells", []) or [])
     if not full_solids or len(full_solids) != len(full_records):
-        warn("cut_v4: full_solidos_registros_incompativeis solidos={} registros={}".format(
+        warn("trim: full_solidos_registros_incompativeis solidos={} registros={}".format(
             len(full_solids), len(full_records)))
         return [], [], ["full_incompativel"]
 
@@ -2734,7 +2735,7 @@ def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_heigh
             records.append(record)
         else:
             rejected.append(record.get("id", "cell{}".format(index)))
-    console("cut_v4: celulas_preservadas={} celulas_borda={}".format(
+    console("trim: celulas_preservadas={} celulas_borda={}".format(
         preserved, boundary))
     return results, records, rejected
 
@@ -2768,8 +2769,8 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
         fail("A tolerancia de fechamento deve ser um comprimento finito nao negativo.")
     wrap = resolve_wrap_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
-    if payload.get("schema") != SCHEMA:
-        fail("Carrier selecionado nao e V4.")
+    if not is_supported_schema(payload.get("schema")):
+        fail("O objeto selecionado nao e um Mapped Surface valido.")
     fit = periodic_diamond_fit(payload, diamond_height, closure_fit_tolerance)
     if not fit.get("compatible", True):
         fail(
@@ -2794,9 +2795,9 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     compound_start = time.perf_counter()
     run.Shape = Part.makeCompound(solids)
     perf_stats["compound_ms"] = (time.perf_counter() - compound_start) * 1000.0
-    add_string(run, "DiamondPatternVersion", "Pattern Full From Wrap V4", "Diamond Pattern V4")
-    add_string(run, "DiamondPatternAlgorithm", "WRAP_CARRIER_V4_FULL", "Diamond Pattern V4")
-    add_string(run, "DiamondPatternWrapSource", wrap.Name, "Diamond Pattern V4")
+    add_string(run, "DiamondPatternVersion", "Diamond Pattern", "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternAlgorithm", "AUZYRON_DIAMOND_FULL", "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternWrapSource", wrap.Name, "Legacy Pattern Properties")
     add_string(run, "PatternId", "diamond", "Pattern Surface")
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_length(run, "PatternHeight", height, "Pattern Surface")
@@ -2808,7 +2809,7 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     add_integer(run, "ClosureModules", fit.get("modules") or 0, "Pattern Surface")
     add_bool(run, "ClosureAdjusted", fit.get("adjusted", False), "Pattern Surface")
     add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
-    add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
+    add_string(run, "DiamondPatternRejected", ";".join(rejected), "Legacy Pattern Properties")
     add_chunks(run, "DiamondPatternCellChunks",
                {"cells": records, "parameters": {
                    "height": height,
@@ -2822,21 +2823,21 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                    "closure_adjusted": fit.get("adjusted", False),
                    "periodic_phase": periodic_phase,
                }},
-               "Diamond Pattern V4")
+               "Legacy Pattern Properties")
     recompute_start = time.perf_counter()
     doc.recompute()
     perf_stats["recompute_ms"] = (time.perf_counter() - recompute_start) * 1000.0
     perf_stats["total_ms"] = (time.perf_counter() - total_start) * 1000.0
-    console("pattern_full_v4: run={} diamond_height={:.3f} diamond_side={:.6f} "
+    console("diamond: run={} diamond_height={:.3f} diamond_side={:.6f} "
             "closure_adjustment={:.6f} pyramid_height={:.3f} solids={} rejected={}".format(
                 name, diamond_height, diamond_side, fit.get("adjustment", 0.0),
                 height, len(solids), len(rejected)))
-    console("pattern_full_v4: timing_ms carriers={carrier_ms:.1f} mapping={mapping_ms:.1f} "
+    console("diamond: timing_ms carriers={carrier_ms:.1f} mapping={mapping_ms:.1f} "
             "solids={solid_ms:.1f} build={build_ms:.1f} compound={compound_ms:.1f} "
             "recompute={recompute_ms:.1f} total={total_ms:.1f} candidates={candidates} "
             "eligible={eligible} curved={curved}".format(**perf_stats))
     if rejected:
-        warn("pattern_full_v4: celulas_rejeitadas={}".format(",".join(rejected)))
+        warn("diamond: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
 
 
@@ -2844,13 +2845,13 @@ def resolve_cut_selection(doc):
     wrap = None
     pattern = None
     for obj in Gui.Selection.getSelection():
-        if (getattr(obj, "MapAlgorithm", "") == SCHEMA or
-                getattr(obj, "WrapAlgorithm", "") == SCHEMA):
+        if (is_supported_schema(getattr(obj, "MapAlgorithm", "")) or
+                is_supported_schema(getattr(obj, "WrapAlgorithm", ""))):
             wrap = obj
         if (getattr(obj, "PatternId", "") and
                 getattr(obj, "PatternMapSource", "")):
             pattern = obj
-        elif getattr(obj, "DiamondPatternAlgorithm", "") == "WRAP_CARRIER_V4_FULL":
+        elif getattr(obj, "DiamondPatternAlgorithm", "") in ("WRAP_CARRIER_V4_FULL", "AUZYRON_DIAMOND_FULL"):
             pattern = obj
     if wrap is None or pattern is None:
         fail("Selecione o Diamond Pattern e o Mapped Surface correspondentes.")
@@ -2885,23 +2886,23 @@ def create_cut():
     apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
         doc, payload, pattern, cell_payload, pattern_height)
-    algorithm = "WRAP_CARRIER_V4_PERIODIC_LOGICAL_BOUNDARY_CUT"
+    algorithm = "AUZYRON_TRIM_PERIODIC_LOGICAL_BOUNDARY"
     if not solids:
-        warn("cut_v4: corte_fisico_falhou; tentando_rebuild_antigo")
+        warn("trim: corte_fisico_falhou; tentando_rebuild_antigo")
         solids, records, rejected = build_cut_cells(
             payload, allowed, apex, diamond_height=diamond_height,
             diamond_side=diamond_side, periodic_phase=periodic_phase)
-        algorithm = "WRAP_CARRIER_V4_CUT_REBUILD_FALLBACK"
+        algorithm = "AUZYRON_TRIM_REBUILD_FALLBACK"
     if not solids:
         fail("Trim Surface nao gerou solidos validos.")
     name = next_name(doc, CUT_PREFIX)
     run = doc.addObject("PartDesign::Feature", name)
     run.Label = short_label(TRIM_LABEL, name)
     run.Shape = Part.makeCompound(solids)
-    add_string(run, "DiamondPatternVersion", "Cut From Wrap V4", "Diamond Pattern V4")
-    add_string(run, "DiamondPatternAlgorithm", algorithm, "Diamond Pattern V4")
-    add_string(run, "DiamondPatternWrapSource", wrap.Name, "Diamond Pattern V4")
-    add_string(run, "DiamondPatternFullSource", pattern.Name, "Diamond Pattern V4")
+    add_string(run, "DiamondPatternVersion", "Trimmed Diamond Pattern", "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternAlgorithm", algorithm, "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternWrapSource", wrap.Name, "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternFullSource", pattern.Name, "Legacy Pattern Properties")
     add_string(run, "PatternId", "diamond", "Pattern Surface")
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_string(run, "PatternSource", pattern.Name, "Pattern Surface")
@@ -2909,7 +2910,7 @@ def create_cut():
     add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
     add_length(run, "DiamondEffectiveSide", diamond_side, "Pattern Surface")
     add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
-    add_string(run, "DiamondPatternRejected", ";".join(rejected), "Diamond Pattern V4")
+    add_string(run, "DiamondPatternRejected", ";".join(rejected), "Legacy Pattern Properties")
     add_chunks(run, "DiamondPatternCellChunks", {
         "cells": records,
         "parameters": {
@@ -2919,11 +2920,11 @@ def create_cut():
             "diamond_side": diamond_side,
             "periodic_phase": periodic_phase,
         },
-    }, "Diamond Pattern V4")
+    }, "Legacy Pattern Properties")
     doc.recompute()
-    console("cut_v4: run={} algoritmo={} solids={} rejected={}".format(name, algorithm, len(solids), len(rejected)))
+    console("trim: run={} algoritmo={} solids={} rejected={}".format(name, algorithm, len(solids), len(rejected)))
     if rejected:
-        warn("cut_v4: celulas_rejeitadas={}".format(",".join(rejected)))
+        warn("trim: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
 
 

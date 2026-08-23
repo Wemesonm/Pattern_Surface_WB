@@ -69,7 +69,7 @@ Full cell. Multiple physical fragments from one boundary boolean must remain
 traceable to that single cell, and negligible fragments cannot silently count
 as a successful unmodified cell.
 
-## V4 Trim Migration Ledger
+## Trim Migration Ledger
 
 | Functions | Destination | Current status |
 | --- | --- | --- |

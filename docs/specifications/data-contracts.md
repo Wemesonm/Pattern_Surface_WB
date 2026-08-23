@@ -20,7 +20,7 @@ practical and must not mutate source objects while decoding an older schema.
 `DATA-REQ-004` **Specified** - Physical carrier triangles and pattern lattice
 cells are separate concepts, fields, and ownership domains.
 
-## Shared V4 Migration Ledger
+## Shared Migration Ledger
 
 | Functions | Destination | Current status |
 | --- | --- | --- |
@@ -30,16 +30,18 @@ cells are separate concepts, fields, and ownership domains.
 | `add_string`, `add_chunks`, `load_chunks`, `next_name` | properties and serialization | Facade |
 | `add_length`, `length_value` | properties | New helpers without V4-original counterparts |
 
-The immutable source inventory is:
+The immutable source inventory is retained under `archive/`; it is not part of the active runtime. The active workbench uses the neutral geometry engine and modular ownership boundaries.
+
+The historical source inventory is:
 
 | Archived source | Responsibility | Replacement |
 | --- | --- | --- |
 | `Wrap_faces_V4.FCMacro` | reload core and call `create_wrap` | Map Faces command/service |
 | `Diamond_pattern_full_from_wrap_V4.FCMacro` | reload core and create full pattern | Diamond command/service |
 | `Cut_diamond_pattern_to_wrap_V4.FCMacro` | reload core and call `create_cut` | Trim Surface command/service |
-| `Wrap_pipeline_V4_core.py` | complete V4 pipeline | transitional compatibility engine and modular destinations |
+| `Wrap_pipeline_V4_core.py` | complete V4 pipeline | neutral geometry engine and modular destinations |
 
-Original V4 constants include `SCHEMA`, `WRAP_PREFIX`, `FULL_PREFIX`,
+Historical V4 constants include `SCHEMA`, `WRAP_PREFIX`, `FULL_PREFIX`,
 `CUT_PREFIX`, `BUILD_ID`, `GRID_HEIGHT`, `GRID_SIDE`, `RELIEF`, `CONTACT`,
 `MAX_EDGE`, `SAG`, `EDGE_TOL`, `LOGICAL_TOL`, `MAX_CYCLE_ADJUST`,
 `CELL_SUBDIVISIONS`, `EXTERNAL_ROW_LIMIT`, `EXTERNAL_ENDPOINT_LIMIT`,
@@ -166,7 +168,7 @@ removes them.
 
 ## Legacy Map Aliases
 
-The current V4 payload uses:
+Archived V4 payloads are read through legacy aliases; new payloads use the active schema.
 
 ```text
 schema, version, grid_height, grid_side, max_edge, sag, bounds,

@@ -45,7 +45,7 @@ object name, or fixture.
 `MAP-REQ-005` **Baseline** - Orient normals through the adjacency graph and
 detect contradictory cycles.
 
-## V4 Mapping Migration Ledger
+## Mapping Migration Ledger
 
 The following V4 functions belong to Map Faces. `Facade` means the active
 implementation still resides in `core_engine.py` and is re-exported

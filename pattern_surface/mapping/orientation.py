@@ -99,6 +99,6 @@ def align_connected_normals(entries, graph):
                 pending.remove(neighbor_index)
                 queue.append(neighbor_index)
     if flips:
-        core.console("wrap_v4: normais_conectadas_invertidas={}".format(flips))
+        core.console("map_faces: normais_conectadas_invertidas={}".format(flips))
 
 __all__ = [name for name in globals() if not name.startswith("_")]

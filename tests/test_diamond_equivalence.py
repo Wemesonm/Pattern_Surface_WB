@@ -14,6 +14,16 @@ class DiamondEquivalenceTests(unittest.TestCase):
                      "DiamondHeight"):
             self.assertIn(name, source)
 
+    def test_active_schema_and_object_prefixes_are_neutral(self):
+        # DATA-REQ-005: new objects do not carry the retired V4 identity.
+        from pattern_surface.common import identifiers
+
+        self.assertEqual("AUZYRON_MAP_V1", identifiers.SCHEMA)
+        self.assertEqual("MappedSurface", identifiers.WRAP_PREFIX)
+        self.assertEqual("DiamondPattern", identifiers.FULL_PREFIX)
+        self.assertEqual("TrimmedPattern", identifiers.CUT_PREFIX)
+        self.assertIn("WRAP_CARRIER_V4", identifiers.LEGACY_SCHEMAS)
+
     def test_pattern_registry_exposes_diamond(self):
         from pattern_surface.patterns import registry
 
