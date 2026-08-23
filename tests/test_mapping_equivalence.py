@@ -40,6 +40,18 @@ class MappingEquivalenceTests(unittest.TestCase):
         self.assertIn("RowHeight", parameters.ROW_HEIGHT_KEY)
         self.assertIn("ClosureTolerance", parameters.CLOSURE_TOLERANCE_KEY)
 
+    def test_generic_grid_contract_is_tool_neutral(self):
+        # DATA-REQ-001, MAP-REQ-024: Map Faces dimensions live in a shared
+        # contract and are not derived from Diamond implementation code.
+        from pattern_surface.common.contracts import GridSpec, map_grid_spec
+
+        spec = map_grid_spec(13.85, 12.0, 0.05)
+        self.assertIsInstance(spec, GridSpec)
+        self.assertEqual(13.85, spec.column_width)
+        self.assertEqual(12.0, spec.row_height)
+        with self.assertRaises(ValueError):
+            map_grid_spec(0.0, 12.0, 0.05)
+
     def test_generic_grid_uses_independent_centered_axes(self):
         # MAP-REQ-023, MAP-REQ-024, MAP-REQ-025.
         from pattern_surface import core_engine as engine

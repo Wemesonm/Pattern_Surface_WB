@@ -38,12 +38,18 @@ from .common.properties_core import (
     next_name as _next_name,
 )
 from .common.selection_core import selected_faces as collect_selected_faces
+from .common.contracts import (
+    DEFAULT_MAP_CLOSURE_TOLERANCE as CONTRACT_MAP_CLOSURE_TOLERANCE,
+    DEFAULT_MAP_COLUMN_WIDTH as CONTRACT_MAP_COLUMN_WIDTH,
+    DEFAULT_MAP_ROW_HEIGHT as CONTRACT_MAP_ROW_HEIGHT,
+    map_grid_spec,
+)
 from .version import BUILD_ID
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
-DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
-DEFAULT_MAP_ROW_HEIGHT = GRID_HEIGHT
-DEFAULT_MAP_CLOSURE_TOLERANCE = 0.05
+DEFAULT_MAP_COLUMN_WIDTH = CONTRACT_MAP_COLUMN_WIDTH
+DEFAULT_MAP_ROW_HEIGHT = CONTRACT_MAP_ROW_HEIGHT
+DEFAULT_MAP_CLOSURE_TOLERANCE = CONTRACT_MAP_CLOSURE_TOLERANCE
 DEFAULT_PATTERN_HEIGHT = 1.0
 DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE = 0.20
 PERIODIC_PATTERN_PHASE = 0.001
@@ -1152,18 +1158,10 @@ def grid_line_values(lower, upper, origin, step):
 
 
 def validate_map_grid(column_width, row_height, closure_tolerance):
-    values = {
-        "Column width": column_width,
-        "Row height": row_height,
-        "Closure tolerance": closure_tolerance,
-    }
-    for label, value in values.items():
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
-            fail("{} must be a finite positive length.".format(label))
-        if not math.isfinite(value) or value <= 0.0:
-            fail("{} must be a finite positive length.".format(label))
+    try:
+        return map_grid_spec(column_width, row_height, closure_tolerance)
+    except ValueError as error:
+        fail(str(error))
 
 
 def carrier_preview(triangles, bounds, column_width=DEFAULT_MAP_COLUMN_WIDTH,
