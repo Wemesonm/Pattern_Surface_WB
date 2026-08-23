@@ -168,77 +168,77 @@ def load_chunks(obj, name):
 
 
 def outer_edges(face):
-    from ..mapping.adjacency import outer_edges as implementation
+    from .mapping.adjacency import outer_edges as implementation
     return implementation(face)
 
 
 def endpoints(edge):
-    from ..mapping.adjacency import endpoints as implementation
+    from .mapping.adjacency import endpoints as implementation
     return implementation(edge)
 
 
 def same_edge(left, right):
-    from ..mapping.adjacency import same_edge as implementation
+    from .mapping.adjacency import same_edge as implementation
     return implementation(left, right)
 
 
 def shared_edge(left, right):
-    from ..mapping.adjacency import shared_edge as implementation
+    from .mapping.adjacency import shared_edge as implementation
     return implementation(left, right)
 
 
 def selected_faces():
-    from ..mapping.adjacency import selected_faces as implementation
+    from .mapping.adjacency import selected_faces as implementation
     return implementation()
 
 
 def source_solid(entry):
-    from ..mapping.adjacency import source_solid as implementation
+    from .mapping.adjacency import source_solid as implementation
     return implementation(entry)
 
 
 def surface_period(surface, axis):
-    from ..mapping.parameterization import surface_period as implementation
+    from .mapping.parameterization import surface_period as implementation
     return implementation(surface, axis)
 
 
 def unwrap_parameter(value, lower, upper, period):
-    from ..mapping.parameterization import unwrap_parameter as implementation
+    from .mapping.parameterization import unwrap_parameter as implementation
     return implementation(value, lower, upper, period)
 
 
 def surface_parameters(face, point, bounds=None):
-    from ..mapping.parameterization import surface_parameters as implementation
+    from .mapping.parameterization import surface_parameters as implementation
     return implementation(face, point, bounds)
 
 
 def parameter_range(face):
-    from ..mapping.parameterization import parameter_range as implementation
+    from .mapping.parameterization import parameter_range as implementation
     return implementation(face)
 
 
 def face_center(face):
-    from ..mapping.parameterization import face_center as implementation
+    from .mapping.parameterization import face_center as implementation
     return implementation(face)
 
 
 def outward(entry):
-    from ..mapping.orientation import outward as implementation
+    from .mapping.orientation import outward as implementation
     return implementation(entry)
 
 
 def axis_length_table(face, bounds, axis, samples=64):
-    from ..mapping.parameterization import axis_length_table as implementation
+    from .mapping.parameterization import axis_length_table as implementation
     return implementation(face, bounds, axis, samples)
 
 
 def interp(table, value, inverse=False):
-    from ..mapping.parameterization import interp as implementation
+    from .mapping.parameterization import interp as implementation
     return implementation(table, value, inverse)
 
 
 def tangent(face, bounds, axis):
-    from ..mapping.orientation import tangent as implementation
+    from .mapping.orientation import tangent as implementation
     return implementation(face, bounds, axis)
 
 
@@ -271,102 +271,102 @@ def orient_entry(entry):
 
 
 def edge_fraction(edge, point):
-    from ..mapping.parameterization import edge_fraction as implementation
+    from .mapping.parameterization import edge_fraction as implementation
     return implementation(edge, point)
 
 
 def local_xy_raw(entry, point):
-    from ..mapping.parameterization import local_xy_raw as implementation
+    from .mapping.parameterization import local_xy_raw as implementation
     return implementation(entry, point)
 
 
 def local_xy(entry, point):
-    from ..mapping.parameterization import local_xy as implementation
+    from .mapping.parameterization import local_xy as implementation
     return implementation(entry, point)
 
 
 def local_uv(entry, local):
-    from ..mapping.parameterization import local_uv as implementation
+    from .mapping.parameterization import local_uv as implementation
     return implementation(entry, local)
 
 
 def apply_transform(entry, local):
-    from ..mapping.parameterization import apply_transform as implementation
+    from .mapping.parameterization import apply_transform as implementation
     return implementation(entry, local)
 
 
 def invert_transform(entry, logical):
-    from ..mapping.parameterization import invert_transform as implementation
+    from .mapping.parameterization import invert_transform as implementation
     return implementation(entry, logical)
 
 
 def point_from_logical(entry, logical):
-    from ..mapping.parameterization import point_from_logical as implementation
+    from .mapping.parameterization import point_from_logical as implementation
     return implementation(entry, logical)
 
 
 def edge_samples(edge, spacing=MAX_EDGE):
-    from ..mapping.seams import edge_samples as implementation
+    from .mapping.seams import edge_samples as implementation
     return implementation(edge, spacing)
 
 
 def apply_matrix(matrix, local):
-    from ..mapping.seams import apply_matrix as implementation
+    from .mapping.seams import apply_matrix as implementation
     return implementation(matrix, local)
 
 
 def aligned_edge_samples(left_edge, right_edge):
-    from ..mapping.seams import aligned_edge_samples as implementation
+    from .mapping.seams import aligned_edge_samples as implementation
     return implementation(left_edge, right_edge)
 
 
 def seam_limit(left_entry, right_entry, left_edge, right_edge):
-    from ..mapping.seams import seam_limit as implementation
+    from .mapping.seams import seam_limit as implementation
     return implementation(left_entry, right_entry, left_edge, right_edge)
 
 
 def neighbor_transform_candidates(placed, target, placed_edge, target_edge):
-    from ..mapping.seams import neighbor_transform_candidates as implementation
+    from .mapping.seams import neighbor_transform_candidates as implementation
     return implementation(placed, target, placed_edge, target_edge)
 
 
 def seam_matrix_error(placed, target, placed_edge, target_edge, matrix):
-    from ..mapping.seams import seam_matrix_error as implementation
+    from .mapping.seams import seam_matrix_error as implementation
     return implementation(placed, target, placed_edge, target_edge, matrix)
 
 
 def fit_neighbor_to_constraints(target, constraints):
-    from ..mapping.seams import fit_neighbor_to_constraints as implementation
+    from .mapping.seams import fit_neighbor_to_constraints as implementation
     return implementation(target, constraints)
 
 
 def fit_neighbor(placed, target, placed_edge, target_edge):
-    from ..mapping.seams import fit_neighbor as implementation
+    from .mapping.seams import fit_neighbor as implementation
     return implementation(placed, target, placed_edge, target_edge)
 
 
 def build_graph(entries):
-    from ..mapping.adjacency import build_graph as implementation
+    from .mapping.adjacency import build_graph as implementation
     return implementation(entries)
 
 
 def signed_normal_at(entry, point):
-    from ..mapping.orientation import signed_normal_at as implementation
+    from .mapping.orientation import signed_normal_at as implementation
     return implementation(entry, point)
 
 
 def edge_midpoint(edge):
-    from ..mapping.orientation import edge_midpoint as implementation
+    from .mapping.orientation import edge_midpoint as implementation
     return implementation(edge)
 
 
 def align_connected_normals(entries, graph):
-    from ..mapping.orientation import align_connected_normals as implementation
+    from .mapping.orientation import align_connected_normals as implementation
     return implementation(entries, graph)
 
 
 def components(entries, graph):
-    from ..mapping.adjacency import components as implementation
+    from .mapping.adjacency import components as implementation
     return implementation(entries, graph)
 
 
@@ -1142,12 +1142,12 @@ def component_logical_bounds(triangles):
 
 
 def line_triangle_points(triangle, value, vertical):
-    from ..mapping.preview import line_triangle_points as implementation
+    from .mapping.preview import line_triangle_points as implementation
     return implementation(triangle, value, vertical)
 
 
 def grid_line_values(lower, upper, origin, step):
-    from ..mapping.preview import grid_line_values as implementation
+    from .mapping.preview import grid_line_values as implementation
     return implementation(lower, upper, origin, step)
 
 
@@ -1168,17 +1168,17 @@ def validate_map_grid(column_width, row_height, closure_tolerance):
 
 def carrier_preview(triangles, bounds, column_width=DEFAULT_MAP_COLUMN_WIDTH,
                     row_height=DEFAULT_MAP_ROW_HEIGHT, origin=None):
-    from ..mapping.preview import carrier_preview as implementation
+    from .mapping.preview import carrier_preview as implementation
     return implementation(triangles, bounds, column_width, row_height, origin)
 
 
 def preview_point_key(point, tolerance=1.0e-4):
-    from ..mapping.preview import preview_point_key as implementation
+    from .mapping.preview import preview_point_key as implementation
     return implementation(point, tolerance)
 
 
 def preview_line_edges(samples):
-    from ..mapping.preview import preview_line_edges as implementation
+    from .mapping.preview import preview_line_edges as implementation
     return implementation(samples)
 
 
