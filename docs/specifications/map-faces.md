@@ -125,6 +125,10 @@ and limits. Characterize `snap_lower_curved_strips_to_grid()` before changing it
 if its effect is required by the approved baseline, replace its pattern-size
 dependency with a topology- and seam-based rule.
 
+The import boundary is guarded by `tests/test_architecture_boundaries.py`.
+The remaining `core_engine.py` dependency is transitional and must be removed
+through an equivalence-tested extraction checkpoint.
+
 `MAP-REQ-027` **Implemented in 0.1.5** - In a cyclic component, record cycle
 closure seams from adjacency edges that were not used by the atlas positioning
 tree. Never infer the opened or periodic seam from face indices, selection

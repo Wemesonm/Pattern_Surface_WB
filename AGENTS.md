@@ -44,6 +44,8 @@ When a change crosses tool boundaries, read every affected specification.
   visual validation fails.
 - Do not push runtime changes to `main` until automated checks and the complete
   visual flow pass.
+- Run `tests/test_architecture_boundaries.py` whenever ownership or imports
+  change. It guards the staged migration away from `core_engine.py`.
 - Do not add an open-source license without owner approval. The project remains
   all rights reserved.
 
