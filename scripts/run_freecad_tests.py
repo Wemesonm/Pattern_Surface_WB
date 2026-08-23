@@ -6,13 +6,13 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).parents[1]
-DEFAULT_FREECAD = pathlib.Path("/Applications/FreeCAD.app/Contents/MacOS/FreeCAD")
+DEFAULT_FREECAD = pathlib.Path("/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd")
 
 
 def main():
     executable = pathlib.Path(os.environ.get("FREECAD_CMD", DEFAULT_FREECAD))
     if not executable.is_file():
-        print("FreeCAD executable not found: {}".format(executable), file=sys.stderr)
+        print("FreeCAD command-line runtime not found: {}".format(executable), file=sys.stderr)
         return 2
     tests = sorted((ROOT / "tests").glob("test_*.py"))
     command = [str(executable), "-c", str(ROOT / "tests" / "freecad_test_runner.py")]
