@@ -112,24 +112,6 @@ normal orientation once at the cell center and align local carrier normals to
 that reference. This optimization is acceptable only if the approved fixture
 retains its solid count, rejected-cell count, closure, and visual boundary.
 
-## Fuzzy Skin Pattern
-
-`PAT-REQ-040` **Implemented** - Fuzzy Skin is an independent registered pattern
-that consumes the generic physical carrier from Map Faces and never imports the
-Diamond package or its lattice constants.
-
-`PAT-REQ-041` **Implemented** - The Fuzzy Skin dialog exposes texture depth,
-feature size, random variation, and deterministic seed. Confirmed values are
-stored in FreeCAD preferences and written to the pattern payload.
-
-`PAT-REQ-042` **Implemented** - Fuzzy Skin displaces carrier vertices along the
-local normal using deterministic seed-based noise. Shared logical vertices use
-the same value so neighboring carrier triangles remain aligned.
-
-`PAT-REQ-043` **Experimental** - The initial implementation creates a closed
-thin surface layer from the displaced carrier. Full fusion with the source
-solid and slicer-specific printability validation remain deferred.
-
 ## V4 Diamond Migration Ledger
 
 | Functions | Destination | Current status |

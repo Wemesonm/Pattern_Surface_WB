@@ -141,21 +141,6 @@ Diamond compatibility properties and fields remain readable during migration:
 - `parameters.periodic_phase`;
 - legacy `parameters.height`.
 
-Fuzzy Skin properties and fields:
-
-- `FuzzyDepth`;
-- `FuzzyFeatureSize`;
-- `FuzzyPatternPayloadChunks`;
-- `parameters.depth`;
-- `parameters.feature_size`;
-- `parameters.variation`;
-- `parameters.seed`;
-- `generation.representation`.
-
-`DATA-REQ-022` **Implemented** - Fuzzy Skin payloads identify themselves with
-`pattern_id: "fuzzy_skin"` and preserve the referenced map object without
-reinterpreting carrier triangles as Diamond cells.
-
 `DATA-REQ-021` **Baseline** - Cell records preserve canonical ID, logical base,
 physical apex, carrier references, and fallback data needed by Trim Surface.
 
