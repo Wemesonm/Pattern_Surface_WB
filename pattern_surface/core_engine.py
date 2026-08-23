@@ -15,7 +15,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 import Part
 
-from ..common.identifiers import (
+from .common.identifiers import (
     CARRIER_LABEL,
     CUT_PREFIX,
     FULL_PREFIX,
@@ -27,7 +27,7 @@ from ..common.identifiers import (
     WRAP_PREFIX,
     short_label,
 )
-from ..common.properties_core import (
+from .common.properties_core import (
     add_bool as _add_bool,
     add_integer as _add_integer,
     add_length as _add_length,
@@ -37,8 +37,8 @@ from ..common.properties_core import (
     length_value as _length_value,
     next_name as _next_name,
 )
-from ..common.selection_core import selected_faces as collect_selected_faces
-from ..version import BUILD_ID
+from .common.selection_core import selected_faces as collect_selected_faces
+from .version import BUILD_ID
 GRID_HEIGHT = 12.0
 GRID_SIDE = 2.0 * GRID_HEIGHT / math.sqrt(3.0)
 DEFAULT_MAP_COLUMN_WIDTH = GRID_SIDE
