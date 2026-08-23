@@ -4,8 +4,8 @@ import FreeCAD as App
 import FreeCADGui as Gui
 import Part
 
-from ...common.properties_core import add_chunks, add_length, add_string, next_name
-from ...common.serialization import load_chunks
+from ...common.properties_core import add_length, add_string, next_name
+from ...common.serialization import add_chunks, load_chunks
 from ...common.identifiers import short_label
 from .metadata import LABEL, PATTERN_ID
 
