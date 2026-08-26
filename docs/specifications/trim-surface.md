@@ -14,8 +14,16 @@ generate a pattern lattice.
 `TRIM-REQ-001` **Baseline** - Resolve one map and one generated pattern from the
 selection or from their stored associations.
 
-`TRIM-REQ-002` **Baseline** - Validate that the pattern belongs to the selected
-map before performing geometry operations.
+`TRIM-REQ-002` **Implemented** - The clipping map may be different from the
+map that generated the pattern. This supports generating a complete pattern
+first, remapping the modified/cut faces, and using the second map as the
+physical trimming envelope. Selecting a Mapping Grid resolves to its parent
+Mapped Surface.
+
+`TRIM-REQ-002A` **Implemented** - When the clipping map differs from the
+pattern source map, every full pattern cell is evaluated against the physical
+cutting envelope. Logical-domain preservation is disabled because the two map
+coordinate systems may describe different boundaries.
 
 `TRIM-REQ-003` **Specified** - Accept any registered pattern that satisfies the
 shared pattern contract. Generic selection and trimming code must not require a

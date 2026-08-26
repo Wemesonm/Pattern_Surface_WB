@@ -1291,11 +1291,13 @@ def resolve_wrap_selection(doc):
         if (is_supported_schema(getattr(obj, "MapAlgorithm", "")) or
                 is_supported_schema(getattr(obj, "WrapAlgorithm", ""))):
             return obj
-        parent = getattr(obj, "WrapParentRun", "")
-        if parent:
-            run = doc.getObject(parent)
-            if run is not None and is_supported_schema(getattr(run, "WrapAlgorithm", "")):
-                return run
+        for parent_name in ("MapParentRun", "WrapParentRun"):
+            parent = getattr(obj, parent_name, "")
+            if parent:
+                run = doc.getObject(parent)
+                if run is not None and is_supported_schema(
+                        getattr(run, "MapAlgorithm", "") or getattr(run, "WrapAlgorithm", "")):
+                    return run
     fail("Selecione um objeto Mapped Surface antes de executar esta ferramenta.")
 
 
@@ -1521,10 +1523,10 @@ def nearest_carrier(point, triangles):
     return best[1] if best else None
 
 
-def extended_triangles(payload):
+def extended_triangles(payload, distance=None):
     original = list(payload["triangles"])
     result = list(original)
-    distance = max(GRID_SIDE, GRID_HEIGHT) * 1.05
+    distance = float(distance if distance is not None else max(GRID_SIDE, GRID_HEIGHT) * 1.05)
     # Only BRep edges without a selected adjacent face are extended.  Inferring
     # this from tessellation incidence reclassifies mismatched seam segments as
     # outside borders and creates the duplicated walls seen in V0.
@@ -1574,8 +1576,12 @@ def extended_triangles(payload):
             continue
         ao = {"q": qao, "p": xyz(pao), "n": list(a["n"])}
         bo = {"q": qbo, "p": xyz(pbo), "n": list(b["n"])}
-        result.append({"face": tri["face"], "component": tri["component"], "ghost": True, "v": [a, b, bo]})
-        result.append({"face": tri["face"], "component": tri["component"], "ghost": True, "v": [a, bo, ao]})
+        result.append({"face": tri["face"], "component": tri["component"],
+                      "curved": tri.get("curved", False), "ghost": True,
+                      "v": [a, b, bo]})
+        result.append({"face": tri["face"], "component": tri["component"],
+                      "curved": tri.get("curved", False), "ghost": True,
+                      "v": [a, bo, ao]})
     return result
 
 
@@ -2463,6 +2469,51 @@ def curved_row_pyramid_solid(canonical, context, height, apex_override=None, sou
         canonical, context, height, apex_override, source_solids)
 
 
+def curved_corner_pyramid_solid(canonical, context, height, apex_override=None,
+                                source_solids=None):
+    """Last-resort closed cell for an eligible curved patch."""
+    center = [sum(point[0] for point in canonical) / 3.0,
+              sum(point[1] for point in canonical) / 3.0]
+    center_value = map_context_point(center, context)
+    if center_value is None or center_value[1] is None:
+        return None, None
+    center_normal = outside_normal_for_point(
+        center_value[0], center_value[1], source_solids)
+    if center_normal is None:
+        return None, None
+    base = []
+    for logical in canonical:
+        mapped = map_context_point(logical, context)
+        if mapped is None or mapped[1] is None:
+            return None, None
+        local_normal = norm(mapped[1])
+        if local_normal is None:
+            return None, None
+        if local_normal.dot(center_normal) < 0.0:
+            local_normal = -local_normal
+        base.append(mapped[0] - local_normal * CONTACT)
+    apex = apex_override if apex_override is not None else (
+        center_value[0] + center_normal * height)
+    faces = [
+        face_from_triangle(base[0], base[2], base[1]),
+        face_from_triangle(base[0], base[1], apex),
+        face_from_triangle(base[1], base[2], apex),
+        face_from_triangle(base[2], base[0], apex),
+    ]
+    if any(face is None for face in faces):
+        return None, None
+    try:
+        shell = Part.makeShell(faces)
+        if shell.isNull() or not shell.isClosed():
+            return None, None
+        solid = Part.makeSolid(shell)
+        if solid.isNull() or not solid.isValid() or len(solid.Solids) != 1:
+            return None, None
+        return solid, apex
+    except Exception:
+        return None, None
+
+
 def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
                 diamond_height=GRID_HEIGHT,
                 diamond_side=None,
@@ -2473,13 +2524,17 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
     # external mapper only completes a canonical cell that crosses its border;
     # it must never create detached rows made exclusively from ghost geometry.
     timing_start = time.perf_counter()
-    carriers = periodic_carriers(payload, list(payload["triangles"]))
+    real_carriers = periodic_carriers(payload, list(payload["triangles"]))
+    carriers = periodic_carriers(
+        payload,
+        extended_triangles(payload, max(diamond_side or GRID_SIDE, diamond_height) * 1.05))
     if perf_stats is not None:
         perf_stats["carrier_ms"] = (time.perf_counter() - timing_start) * 1000.0
     results, records, rejected = [], [], []
     candidate_count = 0
     eligible_count = 0
     curved_count = 0
+    curved_corner_fallback_count = 0
     mapping_ms = 0.0
     solid_ms = 0.0
     for triangle_id, canonical in canonical_triangles(
@@ -2492,6 +2547,11 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
             continue
         eligible_count += 1
         mapping_start = time.perf_counter()
+        # A ghost strip may complete a border cell, but it may never create a
+        # detached cell with no contact to the real mapped surface.
+        _, real_fragments = local_cell_context(payload, canonical, real_carriers, False)
+        if not real_fragments:
+            continue
         context, fragments = local_cell_context(payload, canonical, carriers, include_ghost)
         mapping_ms += (time.perf_counter() - mapping_start) * 1000.0
         if not fragments:
@@ -2514,6 +2574,11 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
         if solid is None:
             solid, apex = canonical_lattice_solid(
                 canonical, context, height, apex_override, source_solids)
+        if solid is None and is_curved:
+            solid, apex = curved_corner_pyramid_solid(
+                canonical, context, height, apex_override, source_solids)
+            if solid is not None:
+                curved_corner_fallback_count += 1
         solid_ms += (time.perf_counter() - solid_start) * 1000.0
         if solid is None:
             rejected.append(triangle_id)
@@ -2525,6 +2590,7 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
             "candidates": candidate_count,
             "eligible": eligible_count,
             "curved": curved_count,
+            "curved_corner_fallbacks": curved_corner_fallback_count,
             "mapping_ms": mapping_ms,
             "solid_ms": solid_ms,
             "rejected": len(rejected),
@@ -2644,8 +2710,9 @@ def physical_cut_piece(cell, combined_envelope, envelopes, index):
     return pieces
 
 
-def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_height):
-    """Trim only partial boundary cells, preserving covered Full geometry."""
+def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_height,
+                              preserve_covered=True):
+    """Trim full cells, optionally preserving cells fully covered by the map."""
     entries = hydrate_entries(doc, payload)
     envelopes = [exact_face_cut_envelope(entry, pattern_height) for entry in entries]
     envelopes = [shape for shape in envelopes if is_valid_shape(shape)]
@@ -2663,7 +2730,8 @@ def build_cut_cells_from_full(doc, payload, pattern, cell_payload, pattern_heigh
     preserved, boundary = 0, 0
     for index, (cell, record) in enumerate(zip(full_solids, full_records), start=1):
         canonical = record.get("canonical")
-        if canonical and domain_coverage_ratio(payload, canonical) >= 1.0 - 1.0e-7:
+        if (preserve_covered and canonical and
+                domain_coverage_ratio(payload, canonical) >= 1.0 - 1.0e-7):
             results.append(cell)
             records.append(record)
             preserved += 1
@@ -2775,7 +2843,7 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     console("diamond: timing_ms carriers={carrier_ms:.1f} mapping={mapping_ms:.1f} "
             "solids={solid_ms:.1f} build={build_ms:.1f} compound={compound_ms:.1f} "
             "recompute={recompute_ms:.1f} total={total_ms:.1f} candidates={candidates} "
-            "eligible={eligible} curved={curved}".format(**perf_stats))
+            "eligible={eligible} curved={curved} corner_fallbacks={curved_corner_fallbacks}".format(**perf_stats))
     if rejected:
         warn("diamond: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
@@ -2785,9 +2853,19 @@ def resolve_cut_selection(doc):
     wrap = None
     pattern = None
     for obj in Gui.Selection.getSelection():
-        if (is_supported_schema(getattr(obj, "MapAlgorithm", "")) or
-                is_supported_schema(getattr(obj, "WrapAlgorithm", ""))):
-            wrap = obj
+        candidate = obj
+        if not (is_supported_schema(getattr(candidate, "MapAlgorithm", "")) or
+                is_supported_schema(getattr(candidate, "WrapAlgorithm", ""))):
+            for parent_name in ("MapParentRun", "WrapParentRun"):
+                parent = getattr(obj, parent_name, "")
+                if parent:
+                    candidate = doc.getObject(parent)
+                    if candidate is not None:
+                        break
+        if candidate is not None and (
+                is_supported_schema(getattr(candidate, "MapAlgorithm", "")) or
+                is_supported_schema(getattr(candidate, "WrapAlgorithm", ""))):
+            wrap = candidate
         if (getattr(obj, "PatternId", "") and
                 getattr(obj, "PatternMapSource", "")):
             pattern = obj
@@ -2798,7 +2876,8 @@ def resolve_cut_selection(doc):
     pattern_map = (getattr(pattern, "PatternMapSource", "") or
                    getattr(pattern, "DiamondPatternWrapSource", ""))
     if pattern_map != wrap.Name:
-        fail("O Diamond Pattern nao pertence ao Mapped Surface selecionado.")
+        console("trim: usando mapa de corte diferente do mapa de origem "
+                "origem={} corte={}".format(pattern_map or "?", wrap.Name))
     return wrap, pattern
 
 
@@ -2822,10 +2901,14 @@ def create_cut():
     periodic_phase = length_value(
         getattr(pattern, "PeriodicPatternPhase", cell_payload.get("parameters", {}).get(
             "periodic_phase", 0.0)), 0.0)
+    pattern_map = (getattr(pattern, "PatternMapSource", "") or
+                   getattr(pattern, "DiamondPatternWrapSource", ""))
+    preserve_covered = pattern_map == wrap.Name
     allowed = {record["id"] for record in cell_payload["cells"]}
     apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
-        doc, payload, pattern, cell_payload, pattern_height)
+        doc, payload, pattern, cell_payload, pattern_height,
+        preserve_covered=preserve_covered)
     algorithm = "AUZYRON_TRIM_PERIODIC_LOGICAL_BOUNDARY"
     if not solids:
         warn("trim: corte_fisico_falhou; tentando_rebuild_antigo")

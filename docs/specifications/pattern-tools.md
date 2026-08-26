@@ -112,6 +112,17 @@ normal orientation once at the cell center and align local carrier normals to
 that reference. This optimization is acceptable only if the approved fixture
 retains its solid count, rejected-cell count, closure, and visual boundary.
 
+`PAT-REQ-033` **Candidate fix** - When an eligible curved cell is rejected by
+all dense surface-following shells, Diamond may use a final closed three-corner
+fallback. It preserves the canonical triangular footprint and local outward
+apex, and is never used for planar cells or cells outside the mapped domain.
+
+`PAT-REQ-034` **Candidate fix** - Full-pattern construction shall use a
+temporary external carrier strip to complete cells that cross a mapped-face
+boundary. Eligibility must still require overlap with a real mapped carrier;
+the strip must never create detached pattern rows. Trim Surface remains
+responsible for removing the excess geometry.
+
 ## Diamond Migration Ledger
 
 | Functions | Destination | Current status |
@@ -126,6 +137,8 @@ retains its solid count, rejected-cell count, closure, and visual boundary.
 | `canonical_shell_solid`, `curved_shell_pyramid_solid`, `curved_height_mapped_solid` | Diamond principal/fallback solids | Adapted for explicit relief |
 | `validate_physical_lattice`, `choose_outside_apex`, `outside_normal_for_point`, `side_faces_intrude_source` | Diamond validation | Facade/adapted |
 | `canonical_lattice_solid`, `curved_lattice_pyramid_solid`, `curved_row_pyramid_solid`, `build_cells` | Diamond generation | Adapted for explicit relief |
+| `curved_corner_pyramid_solid` | Curved-cell final fallback | Candidate fix; requires visual approval |
+| `extended_triangles` in full-pattern construction | One-cell boundary overscan | Candidate fix; requires visual approval |
 | `source_solids_by_face`, `create_full_pattern` | Diamond orchestration | Transitional service |
 
 ## Algorithm and Data Flow
@@ -200,6 +213,8 @@ Automated:
 - a periodic map within the user tolerance fits only its lateral side,
   preserves triangle height, and creates one copy of every seam cell;
 - a periodic map outside the user tolerance reports incompatibility.
+- eligible curved cells do not disappear solely because OCC rejects their dense
+  surface-following shell; the final fallback is reported only when used.
 
 Visual:
 

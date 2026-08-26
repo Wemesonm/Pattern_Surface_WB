@@ -30,6 +30,19 @@ class DiamondEquivalenceTests(unittest.TestCase):
         item = registry.get("diamond")
         self.assertEqual("PatternSurface_Pattern_Diamond", item["command_id"])
 
+    def test_curved_cell_has_closed_final_fallback(self):
+        # PAT-REQ-033: eligible curved cells get a final geometry fallback.
+        source = ENGINE.read_text(encoding="utf-8")
+        self.assertIn("def curved_corner_pyramid_solid", source)
+        self.assertIn("if solid is None and is_curved", source)
+
+    def test_full_pattern_overscans_real_boundaries(self):
+        # PAT-REQ-034: boundary overscan may complete real border cells only.
+        source = ENGINE.read_text(encoding="utf-8")
+        self.assertIn("def extended_triangles(payload, distance=None)", source)
+        self.assertIn("real_carriers = periodic_carriers", source)
+        self.assertIn("if not real_fragments", source)
+
 
 if __name__ == "__main__":
     unittest.main()

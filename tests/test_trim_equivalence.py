@@ -11,6 +11,14 @@ ROOT = pathlib.Path(__file__).parents[1]
 
 
 class TrimEquivalenceTests(unittest.TestCase):
+    def test_trim_accepts_parent_map_or_alternate_cut_map(self):
+        # TRIM-REQ-002: a second map may define the clipping envelope.
+        source = (ROOT / "pattern_surface/core_engine.py").read_text(encoding="utf-8")
+        self.assertIn('(\"MapParentRun\", \"WrapParentRun\")', source)
+        self.assertIn("mapa de corte diferente do mapa de origem", source)
+        self.assertIn("preserve_covered = pattern_map == wrap.Name", source)
+        self.assertIn("preserve_covered=preserve_covered", source)
+
     def test_fixture_opens_and_contains_faces(self):
         document = App.openDocument(str(ROOT / "tests/fixtures/container_four_faces.FCStd"))
         try:
