@@ -11,6 +11,8 @@ PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Auzyron_Patterns_WB/Ma
 LEGACY_PREFERENCE_PATH = "User parameter:BaseApp/Preferences/Mod/Pattern_Surface_WB/MapFaces"
 COLUMN_WIDTH_KEY = "LastColumnWidth"
 ROW_HEIGHT_KEY = "LastRowHeight"
+COLUMN_COUNT_KEY = "LastColumnCount"
+ROW_COUNT_KEY = "LastRowCount"
 CLOSURE_TOLERANCE_KEY = "LastClosureTolerance"
 
 DEFAULT_COLUMN_WIDTH = DEFAULT_MAP_COLUMN_WIDTH
@@ -18,6 +20,8 @@ DEFAULT_ROW_HEIGHT = DEFAULT_MAP_ROW_HEIGHT
 DEFAULT_CLOSURE_TOLERANCE = DEFAULT_MAP_CLOSURE_TOLERANCE
 MIN_LENGTH = 0.01
 MAX_LENGTH = 100000.0
+MIN_COUNT = 1
+MAX_COUNT = 100000
 
 
 def preferences():
@@ -35,8 +39,17 @@ def stored_float(key, default):
     return legacy_preferences().GetFloat(key, default)
 
 
+def stored_int(key, default):
+    value = preferences().GetInt(key, -1)
+    if value >= 0:
+        return value
+    return legacy_preferences().GetInt(key, default)
+
+
 def last_values():
     return {
+        "column_count": max(MIN_COUNT, stored_int(COLUMN_COUNT_KEY, 24)),
+        "row_count": max(MIN_COUNT, stored_int(ROW_COUNT_KEY, 4)),
         "column_width": max(
             MIN_LENGTH, stored_float(COLUMN_WIDTH_KEY, DEFAULT_COLUMN_WIDTH)),
         "row_height": max(
@@ -54,6 +67,12 @@ def save_values(column_width, row_height, closure_tolerance):
     store.SetFloat(CLOSURE_TOLERANCE_KEY, float(closure_tolerance))
 
 
+def save_counts(column_count, row_count):
+    store = preferences()
+    store.SetInt(COLUMN_COUNT_KEY, int(column_count))
+    store.SetInt(ROW_COUNT_KEY, int(row_count))
+
+
 def get_parameters():
     from PySide import QtGui
     try:
@@ -66,19 +85,10 @@ def get_parameters():
     dialog.setWindowTitle("Map Faces")
     layout = QtWidgets.QFormLayout(dialog)
 
-    column_width = QtWidgets.QDoubleSpinBox(dialog)
-    column_width.setRange(MIN_LENGTH, MAX_LENGTH)
-    column_width.setDecimals(3)
-    column_width.setSuffix(" mm")
-    column_width.setValue(values["column_width"])
-    layout.addRow("Column width:", column_width)
-
-    row_height = QtWidgets.QDoubleSpinBox(dialog)
-    row_height.setRange(MIN_LENGTH, MAX_LENGTH)
-    row_height.setDecimals(3)
-    row_height.setSuffix(" mm")
-    row_height.setValue(values["row_height"])
-    layout.addRow("Row height:", row_height)
+    explanation = QtWidgets.QLabel(
+        "Select the source faces to create a generic map.\n"
+        "Pattern size is chosen in the pattern command.")
+    layout.addRow(explanation)
 
     closure_tolerance = QtWidgets.QDoubleSpinBox(dialog)
     closure_tolerance.setRange(MIN_LENGTH, MAX_LENGTH)
@@ -98,8 +108,8 @@ def get_parameters():
         return None
 
     result = {
-        "column_width": float(column_width.value()),
-        "row_height": float(row_height.value()),
+        "column_width": values["column_width"],
+        "row_height": values["row_height"],
         "closure_tolerance": float(closure_tolerance.value()),
     }
     save_values(**result)

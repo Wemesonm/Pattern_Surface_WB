@@ -23,6 +23,15 @@ def imported_modules(path):
 
 
 class ArchitectureBoundaryTests(unittest.TestCase):
+    def test_boleado_is_registered_and_does_not_import_diamond(self):
+        from pattern_surface.patterns import registry
+
+        item = registry.get("boleado")
+        self.assertEqual("PatternSurface_Pattern_Boleado", item["command_id"])
+        imports = imported_modules(ROOT / "pattern_surface/patterns/boleado/engine.py")
+        self.assertEqual(set(), {module for module in imports
+                                 if "diamond" in module.lower()})
+
     def test_map_faces_does_not_import_pattern_packages(self):
         """MAP-REQ-026: mapping stays independent of optional patterns."""
         violations = []

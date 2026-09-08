@@ -21,6 +21,12 @@ def add_integer(obj, name, value, group):
     setattr(obj, name, int(value))
 
 
+def add_float(obj, name, value, group):
+    if name not in obj.PropertiesList:
+        obj.addProperty("App::PropertyFloat", name, group)
+    setattr(obj, name, float(value))
+
+
 def add_string_list(obj, name, value, group):
     if name not in obj.PropertiesList:
         obj.addProperty("App::PropertyStringList", name, group)

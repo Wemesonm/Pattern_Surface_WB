@@ -49,6 +49,20 @@ objects.
 
 ## Diamond Pattern
 
+The `Diamond Pattern` command uses the approved baseline engine in
+`pattern_surface/core_engine.py`. Experimental curved-surface work is exposed
+separately as `Diamond Pattern Prototype` through
+`pattern_surface/prototype_engine.py`. Both commands consume the same Map
+Faces payload and remain compatible with the shared Trim Surface contract.
+
+`Diamond Pattern Prototype V2` is a third, isolated experiment. It consumes
+only the serialized Map Faces payload and creates a complete mapped pattern
+without importing the approved Diamond engine, the original Prototype engine,
+mapping implementation, or Trim Surface. Its algorithm identifier is
+`AUZYRON_DIAMOND_PROTOTYPE_V2_BVH_NORMAL`; it uses shared logical nodes,
+barycentric carrier projection, continuous normal selection, local relief, and
+per-cell solid validation. It is intentionally not a Trim Surface input.
+
 `PAT-REQ-020` **Baseline** - Diamond owns triangular pyramid generation,
 canonical cell IDs, clipped cell fragments, apex placement, curved-solid
 fallbacks, and rejected-cell reporting.
@@ -70,6 +84,19 @@ mutation.
 
 `PAT-REQ-024` **Baseline** - Pyramid height is applied along the local outward
 surface normal and is explicit in principal and fallback solid paths.
+
+`PAT-REQ-066` **Specified** — Blender Diamond boundary cells must be clipped
+against the physical carrier triangles, not admitted or rejected by their
+logical center. The resulting exposed relief boundary follows the mapped face
+boundary, including curved cutouts and fillets. A boundary intersection may
+split one pyramid facet into multiple carrier-conforming fragments, while its
+unclipped facet plane and requested relief remain unchanged. User requested
+2026-09-08.
+
+`PAT-REQ-067` **Specified** — If the CAD body validates but the separately
+displayed relief cannot be exported as a closed manifold, Blender still opens a
+clearly labelled preview `.blend`. STL export remains blocked and the command
+reports the manifold counts. This does not label the preview ready for export.
 
 `PAT-REQ-025` **Implemented in 0.1.5** - A closed periodic component must be sampled across
 its logical closing seam. Diamond creates one canonical representative for a
@@ -123,6 +150,14 @@ boundary. Eligibility must still require overlap with a real mapped carrier;
 the strip must never create detached pattern rows. Trim Surface remains
 responsible for removing the excess geometry.
 
+`PAT-REQ-035` **Candidate refinement** - Diamond shall expose a curved-surface
+relief factor, persisted in preferences and on the pattern object. The value
+is the minimum relief permitted for strongly curved cells. Cells marked as
+curved shall transition continuously from full relief to that minimum using
+their local carrier-normal variation; planar cells, cell bases, lattice IDs,
+seams, and the Map Faces carrier shall remain unchanged. The requested
+`PatternHeight` remains the maximum relief used by Trim Surface envelopes.
+
 ## Diamond Migration Ledger
 
 | Functions | Destination | Current status |
@@ -153,6 +188,12 @@ responsible for removing the excess geometry.
 8. Serialize pattern metadata and create the pattern object.
 
 ## Outputs and FreeCAD Objects
+
+The independent `Boleado Pattern` creates rounded mapped bumps. It owns its
+hemisphere radius, horizontal and vertical spacing, row offset, and surface
+penetration. Its exposed height is always equal to the radius, producing a true
+half-sphere. It consumes the public Map Faces payload and emits the generic
+pattern payload without importing Diamond lattice code.
 
 `PAT-REQ-030` **Baseline** - Pattern objects expose `PatternId`,
 `PatternMapSource`, and `PatternHeight`.
@@ -215,6 +256,8 @@ Automated:
 - a periodic map outside the user tolerance reports incompatibility.
 - eligible curved cells do not disappear solely because OCC rejects their dense
   surface-following shell; the final fallback is reported only when used.
+- a curved-relief factor changes only curved-cell apex heights and is serialized
+  in the pattern object and payload.
 
 Visual:
 
@@ -222,3 +265,122 @@ Visual:
 2. Confirm the staggered triangular lattice remains correct after extraction.
 3. Test pyramid heights `0.500`, `1.000`, and `2.000 mm`.
 4. Confirm only relief changes and the pattern remains aligned across seams.
+5. Regenerate the same model with curved-surface relief at 100% and 50%;
+   planar cells must remain unchanged while the lower curved band becomes less
+   pronounced at 50%.
+
+## Blender backend
+
+`PAT-REQ-060` **Implemented** — An independent Blender command accepts a selected
+map run or its grid, asks for Diamond size and relief height, transfers the
+source body and public carrier, and generates clipped triangular relief in a
+new Blender project. It does not require a Diamond result in FreeCAD. Existing
+native Pattern Tools remain unchanged.
+
+
+`PAT-REQ-061` **Specified** — Preserve original CAD and Blender projects. Keep
+body and relief copies hidden in the result. Validate manifold edges, connected
+components and positive volume before labelling a result complete. Failure must
+be visible and must not be labelled ready for export. No cloud, MCP, or AI is
+required by the installed command.
+
+`PAT-REQ-062` **Specified** — Preserve approved finishing: explicit 0.045 mm
+finish allowance, shared valley vertices and sharp pyramid facets. For wrap
+surfaces, optionally infer a longitudinal axis from carrier normals and remove
+relief displacement along that axis. Never assume global Z. Reject unsupported
+periodic layouts explicitly. Generic carriers may introduce approximation.
+
+`PAT-REQ-063` **Specified** — On planar walls, use physical orthonormal
+coordinates and constant nominal lattice spacing and relief height. The public
+map supplies spacing and phase, not a deformation from a rectangle onto a
+trapezoid. Clip the nominal facets at the physical wall boundary without
+changing their planes. Keep this path separate from curved carrier sampling.
+Union closed clipped patches with the CAD body and validate the final mesh;
+do not label a failed union ready for export. User requested 2026-09-08.
+
+## Physical-size population
+
+`PAT-REQ-064` **Specified** — The approved Diamond dialog asks for triangle
+height (size), default 12 mm, relief height, default 1.5 mm, and the existing
+closure tolerance. Experimental gap and curved-relief controls stay in Prototype.
+The existing approved lattice derives candidates from physical atlas bounds and
+requested size, independently of map preview divisions. Iterate ascending logical
+rows (bottom to top in atlas coordinates); preserve phase, IDs, boundary handling,
+source-face references and approved solid construction. No global axis is imposed.
+This supersedes the map-grid density wording in PAT-REQ-031. Visual approval of
+new results remains pending. User requested 2026-09-08.
+
+`PAT-REQ-065` **Specified** — Blender export uses the solid feature referenced
+by the mapped faces, never an enclosing App::Part assembly of historical features.
+Remove unreferenced generated vertices before closing the relief shell. Keep
+nonmanifold/connected-component validation strict and report its failing counts.
+An empty selection reports an actionable message without calling startup GUI APIs.
+Regression: Large Drawer, 2026-09-08; native Diamond and Trim remain unchanged.
+
+For multiple mapped source solids, unite their exact CAD shapes before meshing;
+reject missing sources or a union that is not one valid connected solid. Do not
+silently export a partial body or preserve intersecting internal compound walls.
+
+`PAT-REQ-068` **Specified** — Blender Diamond creates a transient local job only
+long enough to populate a new interactive Blender scene. It must frame every
+visible result object before the viewport is shown, must not save a `.blend` or
+STL automatically, and must remove its temporary job package once Blender has
+loaded the geometry. The user owns any later manual export or save. Before a
+new run, remove stale Auzyron job packages from prior runs. User requested
+2026-09-08.
+
+
+`PAT-REQ-069` **Superseded by PAT-REQ-071** — Restore September 6 independent Diamond sampling
+with default resolution 20. Refine the clipped logical facets using conforming
+shared-edge splits, reevaluating each vertex on the carrier. Preserve original
+pyramid facet identities and planar clipping. Resolution must affect generated
+curved geometry, not only a stored parameter. Validate boundary and periodic
+closure after refinement. User requested restoring earlier quality, 2026-09-08.
+
+Validation for PAT-REQ-069 (2026-09-08): 60 automated tests passed; the saved
+container map generated 317,800 outer triangles / 637,464 total faces in about
+24 seconds. Blender 5.1.2 confirmed one connected relief component, zero
+nonmanifold edges and positive volume. Workbench installation verified. A
+separate background render verified the restored facet shading. This checks the
+relief, not a new Boolean union; existing worker body/union behavior is unchanged.
+Visual equivalence to the original analytic model remains subject to review;
+carrier interpolation and current normal displacement are still used.
+
+`PAT-REQ-070` **Superseded by PAT-REQ-071** — Restore the approved September 6 mesh finish only:
+retain resolution 20, shared pyramid facets and longitudinal positions on
+periodic rounded wraps. Infer the row axis from carrier derivatives with
+winding-independent signs; remove its relief component without renormalizing.
+Keep current UI, density controls, selection, export and planar-wall behavior.
+Validate lower-boundary positions and rotation invariance. User requested
+2026-09-08.
+
+
+`PAT-REQ-071` **Implemented** — Restore the regular triangular sampling approved
+visually on 2026-09-08 from the last 2026-09-06 Python generator. On complete
+periodic carrier strips, use
+8 uniform subdivisions per pyramid facet, the historical local-normal offset,
+shared periodic vertices, backing closure and flat facet display. Do not impose
+carrier triangulation on these pattern facets. Preserve requested-size density,
+planar physical clipping, partial-boundary clipping, source-body validation,
+transient jobs and the current UI. Select the regular path by logical coverage
+never by document, face IDs or world axes. Cut uniform triangles at unaligned
+open rims; irregular domains and cutouts retain their boundary clipping path. Historical source was
+recovered from the full read at 2026-09-06T12:26:41Z and the last periodic seam
+patch at 12:27:21Z. The approved relief has 37,248 vertices and 74,112 faces
+at the recorded dimensions and resolution 8. Verify exact vertex/face agreement
+against the preserved historical test before accepting the restoration.
+
+
+PAT-REQ-071 acceptance (2026-09-08): the preserved 9,640-triangle map produced
+exactly equal vertices, face indices and facet IDs against the recovered source
+(37,248 vertices, 74,112 faces). The installed FreeCAD job exporter then read the
+saved Base Container map (9,688 carrier triangles), exported the original solid,
+and the current Blender worker generated the same pattern topology with zero
+nonmanifold edges. Both body and pattern are individually closed; this retains
+the existing body-plus-pattern workflow, not a new Boolean union. The complete
+piece was opened in Blender Edit Mode at the preserved lower-edge view. All 62
+FreeCAD-runtime tests passed, including a golden historical coordinate/topology
+regression, unaligned-rim clipping and existing planar/density checks. Installation
+symlink verified. Only geometry_closed.py, worker.py and the command's sampling
+default changed in runtime. Recovery checkpoint:
+`.checkpoints/20260908T231602Z_before_approved_sept6_sampling_restore`.

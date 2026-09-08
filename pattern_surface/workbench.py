@@ -2,7 +2,7 @@ import os
 
 import FreeCADGui as Gui
 
-from .commands import COMMANDS, register_commands
+from .commands import BLENDER_COMMANDS, COMMANDS, register_commands
 
 
 ICON = os.path.join(os.path.dirname(__file__), "resources", "icons", "workbench.svg")
@@ -17,6 +17,8 @@ class PatternSurfaceWorkbench(Gui.Workbench):
         register_commands()
         self.appendToolbar("Pattern Surface", COMMANDS)
         self.appendMenu("Pattern Surface", COMMANDS)
+        self.appendToolbar("Blender", BLENDER_COMMANDS)
+        self.appendMenu("Blender", BLENDER_COMMANDS)
 
     def Activated(self):
         return

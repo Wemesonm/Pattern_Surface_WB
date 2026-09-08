@@ -23,11 +23,11 @@ class DiamondHeightTests(unittest.TestCase):
     def test_dialog_contract(self):
         from pattern_surface.patterns.diamond import metadata, parameters
 
-        self.assertEqual(1.0, metadata.DEFAULT_HEIGHT)
+        self.assertEqual(1.5, metadata.DEFAULT_HEIGHT)
         self.assertEqual(0.01, metadata.MIN_HEIGHT)
         self.assertIn("LastHeight", parameters.PREFERENCE_KEY)
         self.assertEqual(12.0, metadata.DEFAULT_DIAMOND_HEIGHT)
-        self.assertEqual(1.0, metadata.DEFAULT_PYRAMID_HEIGHT)
+        self.assertEqual(1.5, metadata.DEFAULT_PYRAMID_HEIGHT)
         self.assertIn("DiamondHeight", parameters.DIAMOND_HEIGHT_KEY)
         self.assertIn("PyramidHeight", parameters.PYRAMID_HEIGHT_KEY)
         self.assertEqual(0.20, metadata.DEFAULT_CLOSURE_FIT_TOLERANCE)
@@ -63,7 +63,9 @@ class DiamondHeightTests(unittest.TestCase):
         self.assertTrue(accepted["compatible"])
         self.assertTrue(accepted["adjusted"])
         self.assertEqual(24, accepted["modules"])
+        # PAT-REQ-026: approved engine fits lateral side, not Prototype gaps.
         self.assertAlmostEqual(period / 24.0, accepted["effective_side"], places=9)
+        self.assertAlmostEqual(0.15, accepted["adjustment"], places=9)
         self.assertAlmostEqual(12.0, accepted["diamond_height"], places=9)
         self.assertFalse(rejected["compatible"])
         self.assertFalse(rejected["adjusted"])

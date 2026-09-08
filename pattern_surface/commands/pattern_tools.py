@@ -7,8 +7,12 @@ from ..common.runtime import maybe_reload
 
 GROUP_COMMAND_ID = "PatternSurface_PatternTools"
 DIAMOND_COMMAND_ID = "PatternSurface_Pattern_Diamond"
+BOLEADO_COMMAND_ID = "PatternSurface_Pattern_Boleado"
+DIAMOND_PROTOTYPE_COMMAND_ID = "PatternSurface_Pattern_DiamondPrototype"
+DIAMOND_PROTOTYPE_V2_COMMAND_ID = "PatternSurface_Pattern_DiamondPrototypeV2"
 ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "pattern_tools.svg")
 DIAMOND_ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "diamond.svg")
+BOLEADO_ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "boleado.svg")
 
 
 class DiamondPatternCommand:
@@ -27,6 +31,49 @@ class DiamondPatternCommand:
 
         maybe_reload(command)
         command.run()
+
+
+class BoleadoPatternCommand(DiamondPatternCommand):
+    def GetResources(self):
+        return {
+            "Pixmap": BOLEADO_ICON,
+            "MenuText": "Boleado Pattern",
+            "ToolTip": "Generate independent rounded bumps on a mapped surface",
+        }
+
+    def Activated(self):
+        from ..patterns.boleado import command
+
+        maybe_reload(command)
+        command.run()
+
+
+class DiamondPatternPrototypeCommand(DiamondPatternCommand):
+    def GetResources(self):
+        resources = super().GetResources()
+        resources["MenuText"] = "Diamond Pattern Prototype"
+        resources["ToolTip"] = "Generate the experimental Diamond Pattern implementation"
+        return resources
+
+    def Activated(self):
+        from ..patterns.diamond import prototype_command
+
+        maybe_reload(prototype_command)
+        prototype_command.run()
+
+
+class DiamondPatternPrototypeV2Command(DiamondPatternCommand):
+    def GetResources(self):
+        resources = super().GetResources()
+        resources["MenuText"] = "Diamond Pattern Prototype V2"
+        resources["ToolTip"] = "Generate the independent V2 surface-following Diamond pattern"
+        return resources
+
+    def Activated(self):
+        import importlib
+        from ..patterns.diamond import v2_command
+
+        importlib.reload(v2_command).run()
 
 
 class PatternToolsGroup:

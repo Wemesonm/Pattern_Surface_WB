@@ -103,6 +103,13 @@ edge references, and whether the loop participates in selected adjacency.
 `carrier_triangles`. It must never be interpreted as Diamond or another
 pattern's cells.
 
+`DATA-REQ-015` **Implemented** — New map objects expose the `MapOwnerGroup`
+object name plus `MapSourceBodies` links; single-Body maps also expose
+`MapSourceBody`. The group name avoids a dependency cycle because the group
+already owns the map object. These associations organize the document tree and
+identify ownership for consumers without altering the serialized payload or the
+source Body's Part Design history.
+
 ## Pattern Object and Payload
 
 Generic properties:
@@ -145,6 +152,10 @@ Diamond compatibility properties and fields remain readable during migration:
 
 `DATA-REQ-021` **Baseline** - Cell records preserve canonical ID, logical base,
 physical apex, carrier references, and fallback data needed by Trim Surface.
+
+`DATA-REQ-022` **Implemented** — A pattern or trim result generated from a map
+with `MapOwnerGroup` is placed in that group and links its source Body/bodies.
+Older maps without ownership links remain valid and retain document-root output.
 
 ## Trim Object and Payload
 
@@ -215,3 +226,32 @@ tests.
 - resolve generic fields and legacy aliases consistently;
 - reject unsupported future schema versions;
 - verify reading old objects causes no mutation.
+
+## Blender job package
+
+`DATA-REQ-050` **Specified** — Version 1 `auzyron.blender-job` JSON carries units
+`mm`, source document/map identity, complete public map payload, source-body
+mesh filename and Diamond parameters. The package contains no executable code
+from the document. A bundled worker reads it with JSON, creates a new result
+project, and writes a structured success/failure report for preflight. The
+package is transient: after the interactive Blender scene has loaded, the
+bridge removes the JSON, source mesh, reports, and any generated result files.
+Periodic fit and requested dimensions are recorded; source objects are never
+mutated.
+
+`DATA-REQ-052` **Implemented** — Blender Diamond receives the requested
+`DiamondHeight`, `PatternHeight`, and closure tolerance from its own dialog.
+Map Faces preview spacing is never used as a Diamond dimension. The periodic
+side is fitted from the requested Diamond size and the mapped period.
+
+`DATA-REQ-042` **Specified** — Map grid dimensions describe the generic preview,
+not the Diamond population. Diamond uses its own requested triangle height and
+closure-fitted side with map bounds/carrier. No payload schema change is required;
+legacy count-based maps remain valid inputs. This clarifies DATA-REQ-020.
+
+`DATA-REQ-051` **Specified** — Blender jobs may include `body_topology` with
+CAD validity, solid count, shell count and material volume in mm³. Source mesh
+winding is preserved. A CAD-certified single solid may have internal cavity
+shells; its mesh must match the certified shell count, have zero nonmanifold
+edges, and agree with CAD material volume within max(0.1 mm³, 0.5%). Legacy
+jobs without this metadata keep the single-component check.

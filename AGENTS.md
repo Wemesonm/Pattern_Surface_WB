@@ -66,6 +66,12 @@ When a change crosses tool boundaries, read every affected specification.
 
 ## Approved Baselines
 
+- Blender periodic-strip Diamond sampling: PAT-REQ-071 restores the September 6
+  regular facet generator visually approved on September 8. Preserve complete
+  relief coordinates/topology, resolution 8 and flat shading, not just face counts.
+  Golden geometry and partial-rim tests guard this alongside current density,
+  planar clipping and export behavior.
+
 - Map Faces and periodic Diamond closure `0.1.5` (commit `6882429`) is the
   current approved mapping and pattern baseline. It preserves periodic
   unwrapping, completes every preview column, fits the Diamond period within

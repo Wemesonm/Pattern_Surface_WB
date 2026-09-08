@@ -5,7 +5,8 @@ FreeCAD workbench for mapping adjacent faces, generating surface patterns, and t
 ## Tools
 
 - **Map Faces** builds the logical carrier and preview grid from selected adjacent faces.
-- **Pattern Tools** is a drop-down pattern registry. The first pattern is **Diamond Pattern**.
+- **Pattern Tools** is a drop-down pattern registry with **Diamond Pattern** and
+  the independent **Boleado Pattern**.
 - **Trim Surface** trims the generated pattern to the mapped source faces.
 
 ## Development installation
@@ -19,6 +20,14 @@ Restart FreeCAD once after installation and select `Auzyron Patterns WB`. The st
 ## Diamond Pattern
 
 Select a Map Faces result and choose `Pattern Tools > Diamond Pattern`. The command asks for `Diamond height` (the cell dimension on the mapped surface, initially 12 mm) and `Pyramid height` (the relief normal to the surface, initially 1 mm). Both last confirmed values are remembered. Select the map and generated pattern before running `Trim Surface`.
+
+## Boleado Pattern
+
+Select a Map Faces result and choose `Pattern Tools > Boleado Pattern`. The
+  command owns hemisphere radius, horizontal and vertical spacing, row offset,
+and surface penetration. The exposed height is always equal to the radius, so
+each element is a true half-sphere. It creates rounded mapped solids and can be
+trimmed with the same generic `Trim Surface` command.
 
 ## Status
 

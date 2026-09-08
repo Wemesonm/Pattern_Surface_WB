@@ -5,7 +5,6 @@ create_wrap/create_full_pattern/create_cut methods.
 """
 
 import base64
-import importlib
 import json
 import math
 import time
@@ -31,6 +30,7 @@ from .common.identifiers import (
 from .common.properties_core import (
     add_bool as _add_bool,
     add_integer as _add_integer,
+    add_float as _add_float,
     add_length as _add_length,
     add_string as _add_string,
     add_string_list as _add_string_list,
@@ -39,15 +39,6 @@ from .common.properties_core import (
     next_name as _next_name,
 )
 from .common.selection_core import selected_faces as collect_selected_faces
-from .common import ownership as _ownership
-
-# Commands reload this geometry engine while FreeCAD remains open. Reload its
-# new shared ownership dependency too, otherwise an already-open session can
-# retain a pre-ownership module and fail during the import of this engine.
-_ownership = importlib.reload(_ownership)
-map_from_selection_object = _ownership.map_from_selection_object
-organize_derived_object = _ownership.organize_derived_object
-organize_map = _ownership.organize_map
 from .common.contracts import (
     DEFAULT_MAP_CLOSURE_TOLERANCE as CONTRACT_MAP_CLOSURE_TOLERANCE,
     DEFAULT_MAP_COLUMN_WIDTH as CONTRACT_MAP_COLUMN_WIDTH,
@@ -70,6 +61,16 @@ EDGE_TOL = 1.0e-5
 LOGICAL_TOL = 2.0e-4
 MAX_CYCLE_ADJUST = 0.05
 CELL_SUBDIVISIONS = 8
+# Curved cells need enough samples to follow the local surface without
+# creating the dense mesh used by the generic carrier.
+CURVED_CELL_SUBDIVISIONS = 6
+# A mapped curved cell may stretch, but a collapsed base produces a thin
+# shard that slicers interpret as unstable walls.  Keep a conservative margin
+# and reject only cells that are clearly no longer printable triangles.
+CURVED_CELL_MIN_AREA_RATIO = 0.18
+CURVED_CELL_MIN_EDGE_RATIO = 0.35
+CURVED_CELL_MAX_EDGE_RATIO = 2.80
+CURVED_CELL_MAX_NORMAL_DEVIATION = 0.10
 EXTERNAL_ROW_LIMIT = max(GRID_SIDE, GRID_HEIGHT) * 1.10
 EXTERNAL_ENDPOINT_LIMIT = GRID_SIDE * 0.25
 EXTERNAL_INWARD_TOL = GRID_HEIGHT * 0.05
@@ -145,6 +146,10 @@ def add_bool(obj, name, value, group):
 
 def add_integer(obj, name, value, group):
     return _add_integer(obj, name, value, group)
+
+
+def add_float(obj, name, value, group):
+    return _add_float(obj, name, value, group)
 
 
 def add_string_list(obj, name, value, group):
@@ -1209,11 +1214,8 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     if doc is None:
         fail("Abra um documento antes de executar Map Faces.")
     if column_count is not None or row_count is not None:
-        if (column_count is None or row_count is None or
-                int(column_count) < 1 or int(row_count) < 1):
-            fail("A quantidade de colunas e linhas deve ser positiva.")
-    else:
-        validate_map_grid(column_width, row_height, closure_tolerance)
+        if int(column_count or 0) < 1 or int(row_count or 0) < 1:
+            fail("A quantidade de divisoes deve ser positiva.")
     console("map_faces: build={} file={}".format(BUILD_ID, __file__))
     entries = selected_faces()
     for entry in entries:
@@ -1241,11 +1243,10 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     ys = [vertex["q"][1] for tri in triangles for vertex in tri["v"]]
     bounds = [min(xs), max(xs), min(ys), max(ys)]
     if column_count is not None:
-        column_count = int(column_count)
-        row_count = int(row_count)
-        column_width = (bounds[1] - bounds[0]) / float(column_count)
-        row_height = (bounds[3] - bounds[2]) / float(row_count)
-        validate_map_grid(column_width, row_height, closure_tolerance)
+        column_width = (bounds[1] - bounds[0]) / float(int(column_count))
+    if row_count is not None:
+        row_height = (bounds[3] - bounds[2]) / float(int(row_count))
+    validate_map_grid(column_width, row_height, closure_tolerance)
     grid_origin = [(bounds[0] + bounds[1]) * 0.5,
                    (bounds[2] + bounds[3]) * 0.5]
     grid = {"column_width": float(column_width),
@@ -1288,8 +1289,6 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
     add_string(run, "MapReady", "True", "Pattern Surface")
     add_length(run, "MapColumnWidth", column_width, "Pattern Surface")
     add_length(run, "MapRowHeight", row_height, "Pattern Surface")
-    add_integer(run, "MapColumnCount", int(column_count or 0), "Pattern Surface")
-    add_integer(run, "MapRowCount", int(row_count or 0), "Pattern Surface")
     add_vector(run, "MapGridOrigin", grid_origin, "Pattern Surface")
     add_length(run, "MapClosureTolerance", closure_tolerance, "Pattern Surface")
     add_bool(run, "MapCompatible", True, "Pattern Surface")
@@ -1307,7 +1306,6 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
         view.LineColor = (0.0, 0.8, 1.0)
         view.LineWidth = 2.0
         view.DisplayMode = "Wireframe"
-    organize_map(doc, run, preview, [entry["object"] for entry in entries])
     doc.recompute()
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(run)
@@ -1317,10 +1315,16 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
 
 def resolve_wrap_selection(doc):
     for obj in Gui.Selection.getSelection():
-        run = map_from_selection_object(obj)
-        if run is not None and is_supported_schema(
-                getattr(run, "MapAlgorithm", "") or getattr(run, "WrapAlgorithm", "")):
-            return run
+        if (is_supported_schema(getattr(obj, "MapAlgorithm", "")) or
+                is_supported_schema(getattr(obj, "WrapAlgorithm", ""))):
+            return obj
+        for parent_name in ("MapParentRun", "WrapParentRun"):
+            parent = getattr(obj, parent_name, "")
+            if parent:
+                run = doc.getObject(parent)
+                if run is not None and is_supported_schema(
+                        getattr(run, "MapAlgorithm", "") or getattr(run, "WrapAlgorithm", "")):
+                    return run
     fail("Selecione um objeto Mapped Surface antes de executar esta ferramenta.")
 
 
@@ -1492,6 +1496,7 @@ def periodic_diamond_fit(payload, diamond_height,
         "period": None,
         "modules": None,
         "adjustment": 0.0,
+        "gap": 0.0,
         "periodic_phase": PERIODIC_PATTERN_PHASE if horizontal else 0.0,
     }
     if not horizontal:
@@ -1502,16 +1507,23 @@ def periodic_diamond_fit(payload, diamond_height,
         result.update({"compatible": False, "reason": "multiple_periods", "period": period})
         return result
     modules = max(1, int(round(period / natural_side)))
+    signed_gap = (period - modules * natural_side) / modules
     adjustment = abs(modules * natural_side - period)
     result.update({
         "period": period,
         "modules": modules,
         "adjustment": adjustment,
-        "compatible": adjustment <= tolerance + 1.0e-9,
+        "gap": signed_gap,
+        # Positive residual is the requested printable gap. A negative
+        # residual means the selected triangle does not fit the period.
+        "compatible": signed_gap >= -tolerance / modules - 1.0e-9,
     })
     if result["compatible"] and adjustment > 1.0e-8:
         result["adjusted"] = True
-        result["effective_side"] = period / modules
+        # Keep the requested triangle side. The closure residual is exposed
+        # as a periodic gap for the Diamond generator instead of silently
+        # changing the triangle dimensions.
+        result["effective_side"] = natural_side
     return result
 
 
@@ -1742,14 +1754,18 @@ def canonical_shell_solid(canonical, context, height, apex_override=None):
         return None, None
 
 
-def curved_shell_pyramid_solid(canonical, context, height, apex_override=None):
+def curved_shell_pyramid_solid(canonical, context, height, apex_override=None,
+                               source_solids=None):
     """One-apex pyramid for curved border cells with a surface-based rear cap."""
     loop = []
     for logical in sample_polygon_edges(canonical, CELL_SUBDIVISIONS):
         value = map_context_point(logical, context)
         if value is None or value[1] is None:
             return None, None
-        loop.append(value[0] - value[1] * CONTACT)
+        normal = outside_normal_for_point(value[0], value[1], source_solids)
+        if normal is None:
+            return None, None
+        loop.append(value[0] - normal * CONTACT)
     loop = dedupe_vectors(loop)
     if len(loop) < 3:
         return None, None
@@ -1759,8 +1775,12 @@ def curved_shell_pyramid_solid(canonical, context, height, apex_override=None):
     center_value = map_context_point(center, context)
     if center_value is None or center_value[1] is None:
         return None, None
-    center_rear = center_value[0] - center_value[1] * CONTACT
-    apex = apex_override if apex_override is not None else center_value[0] + center_value[1] * height
+    center_normal = outside_normal_for_point(
+        center_value[0], center_value[1], source_solids)
+    if center_normal is None:
+        return None, None
+    center_rear = center_value[0] - center_normal * CONTACT
+    apex = apex_override if apex_override is not None else center_value[0] + center_normal * height
 
     faces = []
     for index in range(len(loop)):
@@ -1788,8 +1808,9 @@ def triangular_height_weight(point, canonical):
     return max(0.0, min(1.0, 3.0 * min(weights)))
 
 
-def curved_height_mapped_solid(canonical, context, height, apex_override=None, source_solids=None):
-    count = CELL_SUBDIVISIONS
+def curved_height_mapped_solid(canonical, context, height, apex_override=None,
+                               source_solids=None, subdivisions=CURVED_CELL_SUBDIVISIONS):
+    count = max(3, int(subdivisions))
     a, b, c = canonical
     rear_nodes = {}
     top_nodes = {}
@@ -2160,20 +2181,260 @@ def map_external_point(point, records):
     return (point3d, normal) if normal is not None else None
 
 
-def build_mapping_context(payload, include_external, real=None, components=None, faces=None, bounds=None):
+def build_mapping_context(payload, include_external, real=None, components=None, faces=None,
+                          bounds=None, direct_entries=None, node_cache=None):
     real = list(payload["triangles"] if real is None else real)
+    direct_entries = list(direct_entries or [])
+    if components is not None:
+        direct_entries = [entry for entry in direct_entries
+                          if entry.get("component", 0) in components]
+    # Carrier faces describe the logical patch, not the complete CAD patch.
+    # Do not restrict direct CAD evaluation to carrier face ids: a cell at a
+    # fillet seam may need the neighboring BRep face even when the carrier
+    # selected only one side of that seam.
     return {
         "real": real,
         "index": build_carrier_index(real),
         "external": external_mapping_records(payload, components, faces, bounds) if include_external else [],
+        "direct_entries": direct_entries,
+        "direct_only": False,
+        "node_cache": node_cache if node_cache is not None else {},
     }
 
 
 def map_context_point(point, context):
+    cache = context.get("node_cache", {})
+    cache_key = qkey2(point)
+    if cache_key in cache:
+        return cache[cache_key]
+    # Evaluate every eligible CAD face first.  Choosing the first entry makes
+    # shared fillet boundaries depend on record order and can switch normals
+    # abruptly from one node to the next.
+    candidates = []
+    raw_normal_hint = context.get("normal_hint")
+    normal_hint = norm(raw_normal_hint) if raw_normal_hint is not None else None
+    for entry in context.get("direct_entries", []):
+        try:
+            local = invert_transform(entry, point)
+            if local is None:
+                continue
+            if (local[0] < -LOGICAL_TOL or local[0] > entry["width"] + LOGICAL_TOL or
+                    local[1] < -LOGICAL_TOL or local[1] > entry["height"] + LOGICAL_TOL):
+                continue
+            value = point_from_logical(entry, point)
+            if value is None:
+                continue
+            scale = max(entry["width"], entry["height"], 1.0)
+            margin = min(local[0], entry["width"] - local[0],
+                         local[1], entry["height"] - local[1]) / scale
+            continuity = 0.0
+            if normal_hint is not None:
+                candidate_normal = norm(value[1])
+                if candidate_normal is not None:
+                    continuity = normal_hint.dot(candidate_normal)
+            candidates.append((margin, continuity, -int(entry.get("index", 0)), value))
+        except Exception:
+            continue
+    if candidates:
+        # Prefer the candidate with the largest interior margin.  This makes
+        # points on a shared boundary deterministic without using carrier
+        # interpolation to resolve a CAD-face seam.
+        value = max(candidates, key=lambda item: (item[0], item[1], item[2]))[3]
+        cache[cache_key] = value
+        return value
+    if context.get("direct_only"):
+        # Curved cells prefer CAD and the explicit external border strip.  A
+        # carrier point is allowed only as a last-resort node completion: it
+        # prevents an entire cell from disappearing when OCC reports no CAD
+        # face for a point on a shared seam. It can never replace a valid CAD
+        # candidate selected above.
+        value = map_external_point(point, context["external"])
+        if value is not None:
+            cache[cache_key] = value
+            return value
+        value = map_carrier_point(point, context["index"])
+        if value is not None:
+            cache[cache_key] = value
+        return value
+    # Carrier interpolation is only a fallback for points with no CAD face;
+    # it must never replace a valid direct CAD evaluation.
     value = map_carrier_point(point, context["index"])
     if value is not None:
+        cache[cache_key] = value
         return value
-    return map_external_point(point, context["external"])
+    value = map_external_point(point, context["external"])
+    if value is not None:
+        cache[cache_key] = value
+    return value
+
+
+CURVED_NORMAL_SPREAD_LIMIT = 0.12
+
+
+def curved_cell_relief_factor(canonical, context, requested_factor):
+    """Blend curved-cell relief from full height to the requested minimum.
+
+    A carrier can be marked curved even when a small logical cell is almost
+    tangent to a plane. Applying one fixed reduction to that entire cell
+    creates a visible step between neighboring cells. The local normal
+    spread is therefore used only to scale the apex relief; the footprint,
+    grid phase, and mapped base points remain unchanged.
+    """
+    requested_factor = min(1.0, max(0.01, float(requested_factor)))
+    if requested_factor >= 1.0 - 1.0e-12:
+        return 1.0
+
+    a, b, c = canonical
+    samples = (
+        a,
+        b,
+        c,
+        [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5],
+        [(b[0] + c[0]) * 0.5, (b[1] + c[1]) * 0.5],
+        [(c[0] + a[0]) * 0.5, (c[1] + a[1]) * 0.5],
+    )
+    center = [
+        (a[0] + b[0] + c[0]) / 3.0,
+        (a[1] + b[1] + c[1]) / 3.0,
+    ]
+    center_value = map_context_point(center, context)
+    if center_value is None or center_value[1] is None:
+        return requested_factor
+    center_normal = norm(center_value[1])
+    if center_normal is None:
+        return requested_factor
+
+    maximum_deviation = 0.0
+    for sample in samples:
+        value = map_context_point(sample, context)
+        if value is None or value[1] is None:
+            continue
+        local_normal = norm(value[1])
+        if local_normal is None:
+            continue
+        # Reversed local normals should not turn a harmless orientation
+        # difference into an artificial curvature measurement.
+        if center_normal.dot(local_normal) < 0.0:
+            local_normal = -local_normal
+        deviation = max(0.0, 1.0 - center_normal.dot(local_normal))
+        maximum_deviation = max(maximum_deviation, deviation)
+
+    curvature_strength = min(
+        1.0,
+        maximum_deviation / CURVED_NORMAL_SPREAD_LIMIT,
+    )
+    # The requested value is the minimum remaining relief on a fully curved
+    # cell. Nearly flat curved cells keep full relief; strongly curved cells
+    # approach the requested minimum.
+    return max(0.01, 1.0 - curvature_strength * (1.0 - requested_factor))
+
+
+def curved_cell_adaptation(canonical, context, requested_relief):
+    """Return a continuous, inward-only footprint adaptation for a curved cell.
+
+    The strength is derived from the same normal samples used for relief. The
+    centroid stays fixed and the footprint is contracted uniformly, so no
+    vertex can move across a neighboring cell or a face boundary. This is a
+    deliberately small correction: the direct face mapping remains the source
+    of the actual shape.
+    """
+    requested_relief = min(1.0, max(0.01, float(requested_relief)))
+    if requested_relief >= 1.0 - 1.0e-12:
+        return canonical, 1.0
+    a, b, c = canonical
+    center = [
+        (a[0] + b[0] + c[0]) / 3.0,
+        (a[1] + b[1] + c[1]) / 3.0,
+    ]
+    samples = (a, b, c,
+               [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5],
+               [(b[0] + c[0]) * 0.5, (b[1] + c[1]) * 0.5],
+               [(c[0] + a[0]) * 0.5, (c[1] + a[1]) * 0.5])
+    center_value = map_context_point(center, context)
+    if center_value is None or center_value[1] is None:
+        return canonical, requested_relief
+    center_normal = norm(center_value[1])
+    if center_normal is None:
+        return canonical, requested_relief
+    maximum_deviation = 0.0
+    for sample in samples:
+        value = map_context_point(sample, context)
+        if value is None or value[1] is None:
+            continue
+        normal = norm(value[1])
+        if normal is None:
+            continue
+        if center_normal.dot(normal) < 0.0:
+            normal = -normal
+        maximum_deviation = max(maximum_deviation,
+                                max(0.0, 1.0 - center_normal.dot(normal)))
+    strength = min(1.0, maximum_deviation / CURVED_NORMAL_SPREAD_LIMIT)
+    # Smoothstep avoids a visible threshold when a row enters the fillet.
+    strength = strength * strength * (3.0 - 2.0 * strength)
+    footprint_scale = max(0.97, 1.0 - 0.03 * strength)
+    adapted = [
+        [center[0] + (point[0] - center[0]) * footprint_scale,
+         center[1] + (point[1] - center[1]) * footprint_scale]
+        for point in canonical
+    ]
+    relief = max(requested_relief, 1.0 - strength * (1.0 - requested_relief))
+    return adapted, relief
+
+
+def curved_cell_is_printable(canonical, context):
+    """Reject curved cells whose mapped footprint has collapsed or flipped."""
+    mapped = []
+    normals = []
+    for logical in canonical:
+        value = map_context_point(logical, context)
+        if value is None or value[1] is None:
+            return False
+        mapped.append(value[0])
+        normal = norm(value[1])
+        if normal is None:
+            return False
+        normals.append(normal)
+
+    reference = norm(sum(normals, App.Vector(0, 0, 0)))
+    if reference is None:
+        return False
+    # A large normal change is expected on a fillet.  It is not, by itself,
+    # evidence that the cell is invalid; rejecting it here was the reason the
+    # curved rows disappeared from otherwise valid patterns.  Degenerate and
+    # inverted footprints are still rejected by the checks below.
+
+    logical_edges = [
+        math.hypot(canonical[0][0] - canonical[1][0], canonical[0][1] - canonical[1][1]),
+        math.hypot(canonical[1][0] - canonical[2][0], canonical[1][1] - canonical[2][1]),
+        math.hypot(canonical[2][0] - canonical[0][0], canonical[2][1] - canonical[0][1]),
+    ]
+    mapped_edges = [
+        mapped[0].distanceToPoint(mapped[1]),
+        mapped[1].distanceToPoint(mapped[2]),
+        mapped[2].distanceToPoint(mapped[0]),
+    ]
+    if any(edge <= EDGE_TOL for edge in logical_edges + mapped_edges):
+        return False
+    ratios = [mapped_edge / logical_edge
+              for mapped_edge, logical_edge in zip(mapped_edges, logical_edges)]
+    if min(ratios) < CURVED_CELL_MIN_EDGE_RATIO:
+        return False
+    if max(ratios) > CURVED_CELL_MAX_EDGE_RATIO:
+        return False
+    if max(ratios) / min(ratios) > CURVED_CELL_MAX_EDGE_RATIO:
+        return False
+
+    logical_area = abs(area2(canonical))
+    mapped_area = mapped[1].sub(mapped[0]).cross(mapped[2].sub(mapped[0])).Length
+    if logical_area <= 1.0e-8 or mapped_area <= logical_area * CURVED_CELL_MIN_AREA_RATIO:
+        return False
+    return True
+
+
+def spread_pattern_triangle(triangle_id, canonical, gap_x, gap_y=None):
+    """Compatibility hook; pitch changes require a topology-aware lattice."""
+    del triangle_id, gap_x, gap_y
+    return canonical
 
 
 def clipped_cell_fragments(carriers, canonical):
@@ -2193,7 +2454,8 @@ def choose_cell_component(fragments):
     return max(by_component.items(), key=lambda item: (item[1], -item[0]))[0]
 
 
-def local_cell_context(payload, canonical, carriers, include_external):
+def local_cell_context(payload, canonical, carriers, include_external, direct_entries=None,
+                       node_cache=None):
     """Build a mapper scoped to one canonical cell and its real surface patch."""
     fragments = clipped_cell_fragments(carriers, canonical)
     if not fragments:
@@ -2210,7 +2472,14 @@ def local_cell_context(payload, canonical, carriers, include_external):
         if key not in seen:
             local_real.append(carrier)
             seen.add(key)
-    context = build_mapping_context(payload, include_external, local_real, {component}, faces, cell_bounds)
+    context = build_mapping_context(
+        payload, include_external, local_real, {component}, faces, cell_bounds,
+        direct_entries=direct_entries,
+        node_cache=node_cache,
+    )
+    context["direct_only"] = any(
+        fragment["carrier"].get("curved", False) for fragment in fragments
+    )
     return context, fragments
 
 
@@ -2381,6 +2650,9 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
         center_value[0], center_value[1], source_solids)
     if center_normal is None:
         return None, None
+    # Use the cell-center normal as a continuity reference when a logical
+    # node lies on the overlap tolerance of two adjacent CAD faces.
+    context["normal_hint"] = center_normal
 
     def aligned_normal(raw_normal):
         normal = norm(raw_normal)
@@ -2398,8 +2670,6 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
             if normal is None:
                 return None, None
             nodes[(i, j)] = mapped[0] - normal * CONTACT
-
-    apex = apex_override if apex_override is not None else center_value[0] + center_normal * height
 
     rear_faces = []
     for i in range(count):
@@ -2420,6 +2690,7 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
     boundary_keys.extend((0, count - i) for i in range(1, count))
     boundary = [nodes[key] for key in boundary_keys]
     boundary_logical = [logical_node(*key) for key in boundary_keys]
+    apex = apex_override if apex_override is not None else center_value[0] + center_normal * height
     side_faces = []
     side_steps = max(3, CELL_SUBDIVISIONS // 2)
 
@@ -2431,7 +2702,14 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
         mapped = map_context_point(q, context)
         if mapped is None or mapped[1] is None:
             return None
-        normal = aligned_normal(mapped[1])
+        local_normal = aligned_normal(mapped[1])
+        if local_normal is None:
+            return None
+        # Rotate the lateral offset continuously from the local base normal
+        # toward the cell-center normal. Using the raw local normal all the
+        # way to the apex twists the side facets when a cell spans the two
+        # curvatures of a fillet.
+        normal = norm(local_normal * (1.0 - ratio) + center_normal * ratio)
         if normal is None:
             return None
         return mapped[0] + normal * (height * ratio - CONTACT * (1.0 - ratio))
@@ -2470,7 +2748,90 @@ def curved_lattice_pyramid_solid(canonical, context, height, apex_override=None,
         return None, None
 
 
-def curved_row_pyramid_solid(canonical, context, height, apex_override=None, source_solids=None):
+def curved_chart_flattened_pyramid_solid(canonical, context, height,
+                                         apex_override=None, source_solids=None):
+    """Build a curved cell from a local flattened chart.
+
+    The contact lattice is sampled on the CAD surface, but every contact
+    point is placed on one parallel plane defined by the cell-center normal.
+    The visible pyramid sides are then straight planar triangles to the
+    apex.  This deliberately avoids the old per-node/per-side normal offset,
+    which can fold a cell when a fillet is curved in two directions.
+    """
+    count = CELL_SUBDIVISIONS
+    a, b, c = canonical
+    nodes = {}
+
+    def logical_node(i, j):
+        return [a[0] + (b[0] - a[0]) * i / count + (c[0] - a[0]) * j / count,
+                a[1] + (b[1] - a[1]) * i / count + (c[1] - a[1]) * j / count]
+
+    center = [sum(point[0] for point in canonical) / 3.0,
+              sum(point[1] for point in canonical) / 3.0]
+    center_value = map_context_point(center, context)
+    if center_value is None or center_value[1] is None:
+        return None, None
+    center_normal = outside_normal_for_point(
+        center_value[0], center_value[1], source_solids)
+    if center_normal is None:
+        return None, None
+    context["normal_hint"] = center_normal
+
+    # First create the 2-D chart, then lift all its nodes using the same
+    # center normal.  Shared logical nodes therefore remain identical across
+    # neighboring cells while the CAD samples still follow the real surface.
+    for i in range(count + 1):
+        for j in range(count + 1 - i):
+            mapped = map_context_point(logical_node(i, j), context)
+            if mapped is None or mapped[1] is None:
+                return None, None
+            nodes[(i, j)] = mapped[0] - center_normal * CONTACT
+
+    rear_faces = []
+    for i in range(count):
+        for j in range(count - i):
+            face = face_from_triangle(nodes[(i, j)], nodes[(i, j + 1)],
+                                      nodes[(i + 1, j)])
+            if face is None:
+                return None, None
+            rear_faces.append(face)
+            if i + j <= count - 2:
+                face = face_from_triangle(nodes[(i + 1, j)], nodes[(i, j + 1)],
+                                          nodes[(i + 1, j + 1)])
+                if face is None:
+                    return None, None
+                rear_faces.append(face)
+
+    boundary_keys = []
+    boundary_keys.extend((i, 0) for i in range(count + 1))
+    boundary_keys.extend((count - i, i) for i in range(1, count + 1))
+    boundary_keys.extend((0, count - i) for i in range(1, count))
+    boundary = [nodes[key] for key in boundary_keys]
+    apex = apex_override if apex_override is not None else (
+        center_value[0] + center_normal * height)
+    if not validate_physical_lattice(nodes, boundary, apex):
+        return None, None
+    side_faces = []
+    for index, start in enumerate(boundary):
+        end = boundary[(index + 1) % len(boundary)]
+        face = face_from_triangle(start, end, apex)
+        if face is None:
+            return None, None
+        side_faces.append(face)
+    try:
+        shell = Part.makeShell(rear_faces + side_faces)
+        if shell.isNull() or not shell.isClosed():
+            return None, None
+        solid = Part.makeSolid(shell)
+        if solid.isNull() or not solid.isValid() or len(solid.Solids) != 1:
+            return None, None
+        return solid, apex
+    except Exception:
+        return None, None
+
+
+def curved_row_pyramid_solid(canonical, context, height, apex_override=None,
+                             source_solids=None, curved_stats=None):
     """Build a curved-row cell without changing the cut behavior.
 
     The lower curved row needs a surface-following rear base, otherwise a
@@ -2481,15 +2842,27 @@ def curved_row_pyramid_solid(canonical, context, height, apex_override=None, sou
     solid, apex = curved_lattice_pyramid_solid(
         canonical, context, height, apex_override, source_solids)
     if solid is not None:
+        if curved_stats is not None:
+            curved_stats["legacy_lattice"] = curved_stats.get("legacy_lattice", 0) + 1
         return solid, apex
-    solid, apex = curved_shell_pyramid_solid(canonical, context, height, apex_override)
+    solid, apex = curved_shell_pyramid_solid(
+        canonical, context, height, apex_override, source_solids)
     if solid is not None:
+        if curved_stats is not None:
+            curved_stats["shell"] = curved_stats.get("shell", 0) + 1
         return solid, apex
     solid, apex = canonical_shell_solid(canonical, context, height, apex_override)
     if solid is not None:
+        if curved_stats is not None:
+            curved_stats["canonical_shell"] = curved_stats.get("canonical_shell", 0) + 1
         return solid, apex
-    return curved_height_mapped_solid(
+    solid, apex = curved_height_mapped_solid(
         canonical, context, height, apex_override, source_solids)
+    if solid is not None:
+        if curved_stats is not None:
+            curved_stats["mapped"] = curved_stats.get("mapped", 0) + 1
+        return solid, apex
+    return None, None
 
 
 def curved_corner_pyramid_solid(canonical, context, height, apex_override=None,
@@ -2542,7 +2915,8 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
                 diamond_side=None,
                 periodic_phase=0.0,
                 allowed_ids=None, apex_records=None, source_shapes=None,
-                perf_stats=None):
+                perf_stats=None, curved_relief_factor=1.0, cell_gap=0.0,
+                cell_gap_x=None, cell_gap_y=None, direct_entries=None):
     # Eligibility is always evaluated against the real logical surface.  The
     # external mapper only completes a canonical cell that crosses its border;
     # it must never create detached rows made exclusively from ghost geometry.
@@ -2553,13 +2927,25 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
         extended_triangles(payload, max(diamond_side or GRID_SIDE, diamond_height) * 1.05))
     if perf_stats is not None:
         perf_stats["carrier_ms"] = (time.perf_counter() - timing_start) * 1000.0
+    curved_relief_factor = min(1.0, max(0.01, float(curved_relief_factor)))
+    cell_gap = max(0.0, float(cell_gap))
+    cell_gap_x = cell_gap if cell_gap_x is None else max(0.0, float(cell_gap_x))
+    cell_gap_y = cell_gap if cell_gap_y is None else max(0.0, float(cell_gap_y))
     results, records, rejected = [], [], []
     candidate_count = 0
     eligible_count = 0
     curved_count = 0
     curved_corner_fallback_count = 0
+    curved_constructor_stats = {
+        "chart_flattened": 0,
+        "mapped": 0,
+        "shell": 0,
+        "canonical_shell": 0,
+        "legacy_lattice": 0,
+    }
     mapping_ms = 0.0
     solid_ms = 0.0
+    node_cache = {}
     for triangle_id, canonical in canonical_triangles(
             payload["bounds"], extra=include_ghost, diamond_height=diamond_height,
             diamond_side=diamond_side, origin_x=periodic_phase):
@@ -2569,13 +2955,21 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
         if allowed_ids is not None and triangle_id not in allowed_ids:
             continue
         eligible_count += 1
+        pattern_canonical = spread_pattern_triangle(
+            triangle_id, canonical, cell_gap_x, cell_gap_y)
         mapping_start = time.perf_counter()
         # A ghost strip may complete a border cell, but it may never create a
         # detached cell with no contact to the real mapped surface.
-        _, real_fragments = local_cell_context(payload, canonical, real_carriers, False)
+        _, real_fragments = local_cell_context(
+            payload, pattern_canonical, real_carriers, False,
+            direct_entries=direct_entries, node_cache=node_cache,
+        )
         if not real_fragments:
             continue
-        context, fragments = local_cell_context(payload, canonical, carriers, include_ghost)
+        context, fragments = local_cell_context(
+            payload, pattern_canonical, carriers, include_ghost,
+            direct_entries=direct_entries, node_cache=node_cache,
+        )
         mapping_ms += (time.perf_counter() - mapping_start) * 1000.0
         if not fragments:
             continue
@@ -2590,16 +2984,40 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
         is_curved = any(fragment["carrier"].get("curved", False) for fragment in fragments)
         if is_curved:
             curved_count += 1
+            adapted_canonical, smooth_relief = curved_cell_adaptation(
+                pattern_canonical, context, curved_relief_factor)
+            if adapted_canonical != pattern_canonical:
+                adapted_context, adapted_fragments = local_cell_context(
+                    payload, adapted_canonical, carriers, include_ghost,
+                    direct_entries=direct_entries, node_cache=node_cache,
+                )
+                if adapted_context is not None and adapted_fragments:
+                    pattern_canonical = adapted_canonical
+                    context, fragments = adapted_context, adapted_fragments
+            if not curved_cell_is_printable(pattern_canonical, context):
+                rejected.append(triangle_id)
+                continue
+            relief_factor = smooth_relief
+        else:
+            relief_factor = 1.0
+        cell_height = height * relief_factor
         solid_start = time.perf_counter()
         if is_curved:
-            solid, apex = curved_row_pyramid_solid(
-                canonical, context, height, apex_override, source_solids)
-        if solid is None:
+            # A cell can intersect more than one carrier face at a fillet.
+            # Do not build that cell from carrier fragments: that exposes the
+            # carrier triangulation as visible pattern geometry and creates a
+            # different result at the lower transition. The common curved
+            # constructor below maps the shared logical lattice instead.
+            if solid is None:
+                solid, apex = curved_row_pyramid_solid(
+                    pattern_canonical, context, cell_height, apex_override, source_solids,
+                    curved_constructor_stats)
+        if solid is None and not is_curved:
             solid, apex = canonical_lattice_solid(
-                canonical, context, height, apex_override, source_solids)
+                pattern_canonical, context, cell_height, apex_override, source_solids)
         if solid is None and is_curved:
             solid, apex = curved_corner_pyramid_solid(
-                canonical, context, height, apex_override, source_solids)
+                pattern_canonical, context, cell_height, apex_override, source_solids)
             if solid is not None:
                 curved_corner_fallback_count += 1
         solid_ms += (time.perf_counter() - solid_start) * 1000.0
@@ -2607,13 +3025,17 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
             rejected.append(triangle_id)
             continue
         results.append(solid)
-        records.append({"id": triangle_id, "canonical": canonical, "apex": xyz(apex)})
+        records.append({"id": triangle_id, "canonical": pattern_canonical, "apex": xyz(apex)})
     if perf_stats is not None:
         perf_stats.update({
             "candidates": candidate_count,
             "eligible": eligible_count,
             "curved": curved_count,
             "curved_corner_fallbacks": curved_corner_fallback_count,
+            "curved_mapped": curved_constructor_stats["mapped"],
+            "curved_shell": curved_constructor_stats["shell"],
+            "curved_canonical_shell": curved_constructor_stats["canonical_shell"],
+            "curved_legacy_lattice": curved_constructor_stats["legacy_lattice"],
             "mapping_ms": mapping_ms,
             "solid_ms": solid_ms,
             "rejected": len(rejected),
@@ -2622,9 +3044,11 @@ def build_cells(payload, include_ghost, height=DEFAULT_PATTERN_HEIGHT,
 
 
 def build_cut_cells(payload, allowed_ids, apex_records, diamond_height=GRID_HEIGHT,
-                    diamond_side=None, periodic_phase=0.0):
+                    diamond_side=None, periodic_phase=0.0, cell_gap=0.0,
+                    direct_entries=None):
     """Rebuild only the physical portion of each canonical full cell."""
     carriers = periodic_carriers(payload, list(payload["triangles"]))
+    node_cache = {}
     results, records, rejected = [], [], []
     for triangle_id, canonical in canonical_triangles(
             payload["bounds"], extra=False, diamond_height=diamond_height,
@@ -2633,20 +3057,25 @@ def build_cut_cells(payload, allowed_ids, apex_records, diamond_height=GRID_HEIG
             continue
         if triangle_id not in allowed_ids:
             continue
-        context, carrier_fragments = local_cell_context(payload, canonical, carriers, False)
-        fragments = domain_fragments(payload, canonical)
+        pattern_canonical = spread_pattern_triangle(triangle_id, canonical, cell_gap)
+        context, carrier_fragments = local_cell_context(
+            payload, pattern_canonical, carriers, False,
+            direct_entries=direct_entries,
+            node_cache=node_cache,
+        )
+        fragments = domain_fragments(payload, pattern_canonical)
         if not carrier_fragments or not fragments:
             continue
         apex_value = apex_records.get(triangle_id)
         if apex_value is None:
             rejected.append(triangle_id)
             continue
-        solid = solid_from_domain_fragments(canonical, fragments, context, v3(apex_value))
+        solid = solid_from_domain_fragments(pattern_canonical, fragments, context, v3(apex_value))
         if solid is None:
             rejected.append(triangle_id)
             continue
         results.append(solid)
-        records.append({"id": triangle_id, "canonical": canonical, "apex": apex_value})
+        records.append({"id": triangle_id, "canonical": pattern_canonical, "apex": apex_value})
     return results, records, rejected
 
 
@@ -2782,16 +3211,11 @@ def source_solids_by_face(doc, payload):
     return result
 
 
-def pattern_cell_payload(pattern):
-    """Load the generic pattern payload while retaining Diamond compatibility."""
-    properties = getattr(pattern, "PropertiesList", [])
-    if "PatternCellChunks" in properties:
-        return load_chunks(pattern, "PatternCellChunks")
-    return load_chunks(pattern, "DiamondPatternCellChunks")
-
-
 def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
-                        closure_fit_tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE):
+                        closure_fit_tolerance=DEFAULT_PATTERN_CLOSURE_FIT_TOLERANCE,
+                        curved_relief_factor=1.0, cell_gap=0.0,
+                        cell_gap_x=None, cell_gap_y=None,
+                        variant="Diamond Pattern Prototype"):
     total_start = time.perf_counter()
     doc = App.ActiveDocument
     if doc is None:
@@ -2800,12 +3224,23 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     diamond_height = float(diamond_height if diamond_height is not None
                            else GRID_HEIGHT)
     closure_fit_tolerance = float(closure_fit_tolerance)
+    curved_relief_factor = float(curved_relief_factor)
+    cell_gap = float(cell_gap)
+    cell_gap_x = cell_gap if cell_gap_x is None else float(cell_gap_x)
+    cell_gap_y = cell_gap if cell_gap_y is None else float(cell_gap_y)
     if height < 0.01:
         fail("A altura da piramide deve ser pelo menos 0.01 mm.")
     if diamond_height < 0.01:
         fail("A altura do diamante deve ser pelo menos 0.01 mm.")
     if not math.isfinite(closure_fit_tolerance) or closure_fit_tolerance < 0.0:
         fail("A tolerancia de fechamento deve ser um comprimento finito nao negativo.")
+    if not math.isfinite(curved_relief_factor) or not 0.01 <= curved_relief_factor <= 1.0:
+        fail("O alivio em superficies curvas deve estar entre 1 e 100 por cento.")
+    if not math.isfinite(cell_gap) or not 0.0 <= cell_gap <= 5.0:
+        fail("O espacamento entre celulas deve estar entre 0 e 5 mm.")
+    if (not math.isfinite(cell_gap_x) or not 0.0 <= cell_gap_x <= 5.0 or
+            not math.isfinite(cell_gap_y) or not 0.0 <= cell_gap_y <= 5.0):
+        fail("Os espacamentos X e Y devem estar entre 0 e 5 mm.")
     wrap = resolve_wrap_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
     if not is_supported_schema(payload.get("schema")):
@@ -2818,13 +3253,22 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                 fit.get("period", 0.0), fit.get("modules", 0),
                 fit.get("adjustment", 0.0), fit.get("tolerance", 0.0)))
     diamond_side = float(fit["effective_side"])
+    direct_entries = hydrate_entries(doc, payload)
     periodic_phase = float(fit.get("periodic_phase", 0.0))
+    closure_gap = max(0.0, float(fit.get("gap", 0.0)))
+    if cell_gap <= 1.0e-9:
+        cell_gap = closure_gap
+    if cell_gap_x <= 1.0e-9:
+        cell_gap_x = cell_gap
     perf_stats = {}
     build_start = time.perf_counter()
     solids, records, rejected = build_cells(
         payload, True, height=height, diamond_height=diamond_height,
         diamond_side=diamond_side, periodic_phase=periodic_phase,
-        source_shapes=source_solids_by_face(doc, payload), perf_stats=perf_stats)
+        source_shapes=source_solids_by_face(doc, payload), perf_stats=perf_stats,
+        curved_relief_factor=curved_relief_factor, cell_gap=cell_gap,
+        cell_gap_x=cell_gap_x, cell_gap_y=cell_gap_y,
+        direct_entries=direct_entries)
     perf_stats["build_ms"] = (time.perf_counter() - build_start) * 1000.0
     if not solids:
         fail("Diamond Pattern nao gerou solidos validos.")
@@ -2834,10 +3278,12 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     compound_start = time.perf_counter()
     run.Shape = Part.makeCompound(solids)
     perf_stats["compound_ms"] = (time.perf_counter() - compound_start) * 1000.0
-    add_string(run, "DiamondPatternVersion", "Diamond Pattern", "Legacy Pattern Properties")
-    add_string(run, "DiamondPatternAlgorithm", "AUZYRON_DIAMOND_FULL", "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternVersion", variant, "Legacy Pattern Properties")
+    add_string(run, "DiamondPatternAlgorithm", "AUZYRON_DIAMOND_PROTOTYPE", "Legacy Pattern Properties")
     add_string(run, "DiamondPatternWrapSource", wrap.Name, "Legacy Pattern Properties")
-    add_string(run, "PatternId", "diamond", "Pattern Surface")
+    add_string(run, "PatternId", "diamond_prototype", "Pattern Surface")
+    add_bool(run, "PrototypeOnly", True, "Pattern Surface")
+    add_string(run, "PatternEngineModule", __name__, "Pattern Surface")
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_length(run, "PatternHeight", height, "Pattern Surface")
     add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
@@ -2845,6 +3291,12 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
     add_length(run, "DiamondEffectiveSide", diamond_side, "Pattern Surface")
     add_length(run, "ClosureFitTolerance", closure_fit_tolerance, "Pattern Surface")
     add_length(run, "ClosureAdjustment", fit.get("adjustment", 0.0), "Pattern Surface")
+    add_float(run, "CurvedReliefFactor", curved_relief_factor,
+              "Pattern Surface")
+    add_length(run, "CellGap", cell_gap, "Pattern Surface")
+    add_length(run, "CellGapX", cell_gap_x, "Pattern Surface")
+    add_length(run, "CellGapY", cell_gap_y, "Pattern Surface")
+    add_length(run, "ClosureGap", closure_gap, "Pattern Surface")
     add_integer(run, "ClosureModules", fit.get("modules") or 0, "Pattern Surface")
     add_bool(run, "ClosureAdjusted", fit.get("adjusted", False), "Pattern Surface")
     add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
@@ -2861,21 +3313,28 @@ def create_full_pattern(height=DEFAULT_PATTERN_HEIGHT, diamond_height=None,
                    "closure_adjustment": fit.get("adjustment", 0.0),
                    "closure_adjusted": fit.get("adjusted", False),
                    "periodic_phase": periodic_phase,
+                   "curved_relief_factor": curved_relief_factor,
+                   "cell_gap": cell_gap,
+                   "cell_gap_x": cell_gap_x,
+                   "cell_gap_y": cell_gap_y,
+                   "closure_gap": closure_gap,
                }},
                "Legacy Pattern Properties")
-    organize_derived_object(run, wrap)
     recompute_start = time.perf_counter()
     doc.recompute()
     perf_stats["recompute_ms"] = (time.perf_counter() - recompute_start) * 1000.0
     perf_stats["total_ms"] = (time.perf_counter() - total_start) * 1000.0
-    console("diamond: run={} diamond_height={:.3f} diamond_side={:.6f} "
+    console("diamond: variant={} run={} diamond_height={:.3f} diamond_side={:.6f} "
             "closure_adjustment={:.6f} pyramid_height={:.3f} solids={} rejected={}".format(
-                name, diamond_height, diamond_side, fit.get("adjustment", 0.0),
+                variant, name, diamond_height, diamond_side, fit.get("adjustment", 0.0),
                 height, len(solids), len(rejected)))
     console("diamond: timing_ms carriers={carrier_ms:.1f} mapping={mapping_ms:.1f} "
             "solids={solid_ms:.1f} build={build_ms:.1f} compound={compound_ms:.1f} "
             "recompute={recompute_ms:.1f} total={total_ms:.1f} candidates={candidates} "
-            "eligible={eligible} curved={curved} corner_fallbacks={curved_corner_fallbacks}".format(**perf_stats))
+            "eligible={eligible} curved={curved} mapped={curved_mapped} "
+            "shell={curved_shell} canonical_shell={curved_canonical_shell} "
+            "legacy_lattice={curved_legacy_lattice} "
+            "corner_fallbacks={curved_corner_fallbacks}".format(**perf_stats))
     if rejected:
         warn("diamond: celulas_rejeitadas={}".format(",".join(rejected)))
     return run
@@ -2904,7 +3363,7 @@ def resolve_cut_selection(doc):
         elif getattr(obj, "DiamondPatternAlgorithm", "") in ("WRAP_CARRIER_V4_FULL", "AUZYRON_DIAMOND_FULL"):
             pattern = obj
     if wrap is None or pattern is None:
-        fail("Selecione um Pattern e o Mapped Surface correspondentes.")
+        fail("Selecione o Diamond Pattern e o Mapped Surface correspondentes.")
     pattern_map = (getattr(pattern, "PatternMapSource", "") or
                    getattr(pattern, "DiamondPatternWrapSource", ""))
     if pattern_map != wrap.Name:
@@ -2919,7 +3378,7 @@ def create_cut():
         fail("Abra um documento antes de executar o Trim Surface.")
     wrap, pattern = resolve_cut_selection(doc)
     payload = load_chunks(wrap, "WrapCarrierChunks")
-    cell_payload = pattern_cell_payload(pattern)
+    cell_payload = load_chunks(pattern, "DiamondPatternCellChunks")
     pattern_height = length_value(
         getattr(pattern, "PatternHeight", cell_payload.get("parameters", {}).get(
             "height", DEFAULT_PATTERN_HEIGHT)))
@@ -2933,20 +3392,25 @@ def create_cut():
     periodic_phase = length_value(
         getattr(pattern, "PeriodicPatternPhase", cell_payload.get("parameters", {}).get(
             "periodic_phase", 0.0)), 0.0)
+    cell_gap = length_value(
+        getattr(pattern, "CellGap", cell_payload.get("parameters", {}).get(
+            "cell_gap", 0.0)), 0.0)
     pattern_map = (getattr(pattern, "PatternMapSource", "") or
                    getattr(pattern, "DiamondPatternWrapSource", ""))
     preserve_covered = pattern_map == wrap.Name
     allowed = {record["id"] for record in cell_payload["cells"]}
-    apex = {record["id"]: record.get("apex") for record in cell_payload["cells"]}
+    apex = {record["id"]: record["apex"] for record in cell_payload["cells"]}
     solids, records, rejected = build_cut_cells_from_full(
         doc, payload, pattern, cell_payload, pattern_height,
         preserve_covered=preserve_covered)
     algorithm = "AUZYRON_TRIM_PERIODIC_LOGICAL_BOUNDARY"
-    if not solids and getattr(pattern, "PatternId", "diamond") == "diamond":
+    if not solids:
         warn("trim: corte_fisico_falhou; tentando_rebuild_antigo")
+        direct_entries = hydrate_entries(doc, payload)
         solids, records, rejected = build_cut_cells(
             payload, allowed, apex, diamond_height=diamond_height,
-            diamond_side=diamond_side, periodic_phase=periodic_phase)
+            diamond_side=diamond_side, periodic_phase=periodic_phase,
+            cell_gap=cell_gap, direct_entries=direct_entries)
         algorithm = "AUZYRON_TRIM_REBUILD_FALLBACK"
     if not solids:
         fail("Trim Surface nao gerou solidos validos.")
@@ -2958,21 +3422,16 @@ def create_cut():
     add_string(run, "DiamondPatternAlgorithm", algorithm, "Legacy Pattern Properties")
     add_string(run, "DiamondPatternWrapSource", wrap.Name, "Legacy Pattern Properties")
     add_string(run, "DiamondPatternFullSource", pattern.Name, "Legacy Pattern Properties")
-    pattern_id = getattr(pattern, "PatternId", "diamond") or "diamond"
-    add_string(run, "PatternId", pattern_id, "Pattern Surface")
+    add_string(run, "PatternId", "diamond", "Pattern Surface")
     add_string(run, "PatternMapSource", wrap.Name, "Pattern Surface")
     add_string(run, "PatternSource", pattern.Name, "Pattern Surface")
     add_length(run, "PatternHeight", pattern_height, "Pattern Surface")
     add_length(run, "DiamondHeight", diamond_height, "Pattern Surface")
     add_length(run, "DiamondEffectiveSide", diamond_side, "Pattern Surface")
+    add_length(run, "CellGap", cell_gap, "Pattern Surface")
     add_length(run, "PeriodicPatternPhase", periodic_phase, "Pattern Surface")
     add_string(run, "DiamondPatternRejected", ";".join(rejected), "Legacy Pattern Properties")
-    add_chunks(run, "PatternCellChunks", {
-        "schema": SCHEMA,
-        "version": 1,
-        "pattern_id": pattern_id,
-        "map_source": wrap.Name,
-        "pattern_source": pattern.Name,
+    add_chunks(run, "DiamondPatternCellChunks", {
         "cells": records,
         "parameters": {
             "height": pattern_height,
@@ -2980,9 +3439,9 @@ def create_cut():
             "diamond_height": diamond_height,
             "diamond_side": diamond_side,
             "periodic_phase": periodic_phase,
+            "cell_gap": cell_gap,
         },
-    }, "Pattern Surface")
-    organize_derived_object(run, wrap)
+    }, "Legacy Pattern Properties")
     doc.recompute()
     console("trim: run={} algoritmo={} solids={} rejected={}".format(name, algorithm, len(solids), len(rejected)))
     if rejected:

@@ -240,6 +240,17 @@ Map Faces creates:
 - a blue wireframe grid preview;
 - when required, a separate red closure-warning object.
 
+`MAP-REQ-052` **Implemented** — A map run and its carrier preview are grouped
+with the source component without becoming Part Design features. For one source
+Body, create a neutral `Pattern Surface (<Body label>)` group inside its nearest
+`App::Part`; link the map, preview, and group to that Body. A map involving
+multiple Bodies uses its own neutral group and links every source Body. Never
+add map objects directly to a `PartDesign::Body`, because that changes its Tip
+and may replace the finished CAD solid.
+
+Selecting the neutral ownership group is equivalent to selecting its map run
+for every Pattern Surface and Blender command.
+
 `MAP-REQ-050` **Specified** - The map object exposes `MapColumnWidth`,
 `MapRowHeight`, `MapGridOrigin`, `MapClosureTolerance`, `MapCompatible`,
 `MapIncompatibleCount`, and `MapCompatibilityReport`.
@@ -297,3 +308,10 @@ Visual:
 3. Confirm no duplicate rows, line fans, missing rows, or duplicated borders.
 4. Change only column width, then only row height, and verify independent spacing.
 5. Confirm incompatible diagnostics are red and the normal grid remains blue.
+
+## Automatic density workflow
+
+`MAP-REQ-062` **Specified** — The Map Faces dialog no longer requests fixed
+row/column counts. It uses generic physical preview spacing internally and asks
+only for closure tolerance. Explicit count arguments remain supported for scripts.
+The preview does not determine pattern density. User requested 2026-09-08.
