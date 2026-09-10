@@ -1,5 +1,32 @@
 # Pattern Tools Specification
 
+`PAT-REQ-082` **Implemented** — Use a concave root envelope for Diagonal Ribs,
+not a scalar fade of the complete rib cross-section. The envelope starts tangent
+to the wall on the native boundary and rises with positive curvature. A smooth
+intersection joins it to the existing rib surface without exceeding the original
+relief or changing the interior. Use a normalized elliptical sag, growing into
+an unbounded envelope as the transition ends, with a smooth reciprocal-norm
+intersection. It approaches the original rib with zero first and second
+derivative error and avoids piecewise-minimum pointed shoulders.
+Preserve the continuous finish skin, native physical
+contour, periodic phase and disabled output. Validate the common concave foot
+for different rib heights, smooth joining, closed real geometry and close-up
+visuals. This is a mesh concordance, not a constant-radius CAD fillet.
+
+`PAT-REQ-081` **Superseded** — Recover the longer, gentle rib termination using
+an explicit 6 mm transition default. Width remains a physical distance to the
+native contour; do not silently scale the user's value or change rib phase,
+height, pitch or the boundary extractor. Restore the historical finish-offset
+skin at the edge and taper only the rib wave: embedding the outer skin in the
+CAD body exposes irregular patches where the tessellations intersect. Keep
+the backing penetration and physical clipping unchanged. Retain explicit saved widths. Preserve
+the all-edges preference written by older versions as a float as well as the
+current boolean representation. Validate the 6 mm finish on the real model with
+4 mm pitch, 1.5 mm height, 45 degrees and resolution 16, showing upper and lower
+close-ups for comparison with the preceding 3 mm result.
+This supersedes PAT-REQ-080's embedding of the outer finish-offset skin; native
+boundary extraction, distance, backing and clipping remain unchanged.
+
 `PAT-REQ-080` **Implemented** — Diagonal Ribs offers a rounded edge transition
 (default 3 mm, zero disables) and an option to apply it to all native boundaries.
 Default lower-edge classification follows the inward atlas row direction, not

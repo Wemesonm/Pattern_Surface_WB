@@ -151,6 +151,28 @@ def _stitch_surface(faces, facet_ids, logical_vertices, add_vertex, period, step
     return stitched, ids
 
 
+def _concave_relief(wave, distance, width, height):
+    """Concave wall-tangent root, smoothly joined to the unchanged rib wave.
+
+    The envelope is shared across the rib section instead of multiplying each
+    height by a fade. A wall-tangent elliptical sag grows into an unbounded
+    envelope; its smooth intersection tends to the original rib with zero
+    first and second derivative error at the end of the transition.
+    """
+    if wave <= 0.0:
+        return 0.0
+    if distance >= width:
+        return wave
+    t = max(0.0, distance / width)
+    sag = t*t / (1.0 + math.sqrt(max(0.0, 1.0-t*t)))
+    envelope = height * sag / ((1.0-t)*(1.0-t))
+    if envelope <= 0.0:
+        return 0.0
+    # Smooth everywhere: unlike a piecewise minimum, no narrow blend band
+    # develops pointed shoulders where a high rib meets the concave root.
+    return wave / math.hypot(1.0, wave/envelope)
+
+
 def build(payload, params):
     dim = dimensions(payload, params)
     carrier = list(payload.get("carrier_triangles", payload.get("triangles", [])))
@@ -255,12 +277,13 @@ def build(payload, params):
         physical, normal = mapped
         amplitude = relief(logical) + dim["finish_offset"]
         if boundary:
-            t = min(1.0, boundary.distance(physical, source.get("component", 0))/dim["blend"])
-            blend = t*t*(3.0-2.0*t)
-            # End just inside the CAD wall so a tessellation gap cannot leave
-            # a floating finish-offset lip. Both endpoint slopes are zero.
-            inset = min(0.02, dim["contact"]*0.2)
-            amplitude = -inset + (amplitude+inset)*blend
+            # Keep the historical continuous skin above the CAD wall. Tapering
+            # it into the wall exposes patches of the intersecting CAD mesh.
+            # Only the rib wave fades; the backing still penetrates the body
+            # and the physical boundary clip still trims the complete result.
+            amplitude = dim["finish_offset"] + _concave_relief(
+                relief(logical), boundary.distance(physical, source.get("component", 0)),
+                dim["blend"], dim["height"])
         outer = _add(physical, _scale(normal, amplitude))
         inner = _sub(physical, _scale(normal, dim["contact"]))
         vertex_cache[key] = len(vertices)

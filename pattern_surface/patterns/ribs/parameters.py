@@ -46,14 +46,15 @@ def get_parameters(map_object=None):
     resolution.setRange(MIN_RESOLUTION, MAX_RESOLUTION)
     resolution.setValue(int(round(_last("Resolution", DEFAULT_RESOLUTION))))
     layout.addRow("Surface resolution:", resolution)
-    blend = length("Rounded edge transition:", "BaseBlend", DEFAULT_BASE_BLEND)
+    blend = length("Concave edge transition:", "BaseBlend", DEFAULT_BASE_BLEND)
     blend.setMinimum(0.0)
     blend.setValue(_last("BaseBlend", DEFAULT_BASE_BLEND))
     all_edges = QtWidgets.QCheckBox("Apply to all edges", dialog)
-    all_edges.setChecked(App.ParamGet(PREFERENCE).GetBool("BlendAllEdges", False))
+    all_edges.setChecked(App.ParamGet(PREFERENCE).GetBool(
+        "BlendAllEdges", bool(_last("BlendAllEdges", 0.0))))
     layout.addRow(all_edges)
     layout.addRow(QtWidgets.QLabel(
-        "Width of the rounded transition. 0 mm disables it.\n"
+        "Width of the rounded transition. 6 mm gives a longer, gentler finish; 0 mm disables it.\n"
         "Unchecked: lower edges only. Checked: the complete face boundary.", dialog))
 
     buttons = QtWidgets.QDialogButtonBox(

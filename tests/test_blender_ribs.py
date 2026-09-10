@@ -14,6 +14,20 @@ def _module():
 
 
 class BlenderRibsTests(unittest.TestCase):
+    def test_concave_root_is_shared_and_joins_original_rib(self):
+        # PAT-REQ-082: this is an envelope, not a scaled-down rib section.
+        f = _module()._concave_relief
+        self.assertAlmostEqual(f(1.5, 0.1, 6, 1.5), f(0.75, 0.1, 6, 1.5), places=8)
+        self.assertEqual(0, f(1.5, 0, 6, 1.5))
+        self.assertGreater(f(1.5, 0.6, 6, 1.5)-2*f(1.5, 0.3, 6, 1.5), 0)
+        for wave in (0.0, 0.01, 0.75, 1.5):
+            samples = [f(wave, i*0.01, 6, 1.5) for i in range(701)]
+            self.assertGreaterEqual(min(samples), -1e-10)
+            self.assertLessEqual(max(samples), wave+1e-10)
+            self.assertTrue(all(b >= a-1e-10 for a, b in zip(samples, samples[1:])))
+            self.assertAlmostEqual(wave, samples[600])
+            self.assertAlmostEqual(wave, samples[599])
+
     def test_transition_sampling_limit_precedes_boundary_allocation(self):
         # PAT-REQ-080: reject impractical density before any large index allocation.
         from unittest.mock import patch
@@ -62,7 +76,7 @@ class BlenderRibsTests(unittest.TestCase):
                                  result["vertices"][:len(result["vertices"])//2]):
             x, y, z = after
             if min(x, y, 12-x, 12-y) < 1e-7:
-                self.assertAlmostEqual(-0.02, z)
+                self.assertAlmostEqual(0.045, z)
             if min(x, y, 12-x, 12-y) >= 3:
                 self.assertAlmostEqual(before[2], z)
         lower = ribs.build(payload, dict(params, base_blend=3))
@@ -70,6 +84,16 @@ class BlenderRibsTests(unittest.TestCase):
                                  lower["vertices"][:len(lower["vertices"])//2]):
             if after[1] >= 3:
                 self.assertAlmostEqual(before[2], after[2])
+        # PAT-REQ-081: a longer finish preserves the skin instead of crossing
+        # into the body, and keeps the interior wave at its original height.
+        gentle = ribs.build(payload, dict(params, base_blend=6, blend_all_edges=True))
+        self.assertEqual(0, gentle["stats"]["bad_edges_before_weld"])
+        outer = gentle["vertices"][:len(gentle["vertices"])//2]
+        self.assertGreaterEqual(min(p[2] for p in outer), 0.045-1e-9)
+        by_xy = {(p[0], p[1]): p[2] for p in outer}
+        standard = {(p[0], p[1]): p[2] for p in result["vertices"][:len(result["vertices"])//2]}
+        self.assertLess(by_xy[(1.5, 1.5)], standard[(1.5, 1.5)])
+        self.assertAlmostEqual(by_xy[(6.0, 6.0)], standard[(6.0, 6.0)])
 
     def test_transition_requires_native_boundary_and_uses_physical_distance(self):
         ribs = _module()

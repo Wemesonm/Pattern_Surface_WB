@@ -2,6 +2,58 @@
 
 Requirements: PAT-REQ-080, DATA-REQ-056.
 
+## Concave root follow-up (PAT-REQ-082)
+
+The user clarified that a scalar fade still did not reproduce the desired
+inverse/concave junction. `_concave_relief` now forms a shared wall-tangent
+concave envelope and smoothly intersects it with the original rib wave. The
+envelope uses elliptical sag divided by the square of the remaining normalized
+distance. A reciprocal Euclidean norm gives a smooth intersection, bounded by
+the original wave, with zero derivative error where it returns to the interior.
+The finish-offset skin remains continuous. A trial using a piecewise polynomial
+minimum produced visibly pointed shoulders and was discarded.
+
+This is a mesh concordance, not an exact circular-radius BRep fillet. There is
+no change to the source contour extraction, map, Diamond or Trim Surface.
+The explicit transition width is 6 mm for these renders (default for new
+settings; saved explicit widths remain respected). Pitch is 4 mm, relief 1.5 mm,
+angle 45 degrees and resolution 16, with all edges enabled.
+
+81 runtime tests pass, including a common concave foot for different wave
+heights, positive root curvature, monotonic bounded relief and unchanged
+interior. The real Blender worker reports one connected relief, zero nonmanifold
+edges and successful validation. Close-ups are under
+`/tmp/auzyron-border-review/concave-smooth-{upper,lower}-back.png`;
+the complete review uses `concave-final-*.png` in the same directory.
+Images are actual rendered test meshes. No blend file is saved automatically.
+User visual acceptance remains pending; main stays at the approved checkpoint.
+
+## Follow-up: longer continuous finish (PAT-REQ-081)
+
+The user rejected the previous finish as less smooth than the historical rear
+edge, then authorized code changes. The recovered screenshot from 16:44 showed
+the original continuous finish skin; old code applied the cubic taper only to
+the cosine wave and retained the 0.045 mm finish offset. The 0.02 mm inset below
+was an unsuccessful aesthetic change: widening the taper exposed irregular CAD
+patches where the outer skin crossed into the body.
+
+Restore `finish_offset + wave * smoothstep(distance / width)`. The physical CAD
+boundary distance, backing penetration and physical clipping are unchanged.
+An explicit 6 mm width produces a longer transition for the tested 1.5 mm relief.
+It is the new dialog default, while previously saved explicit widths remain
+respected. The older float all-edges preference is read as a fallback to the
+current boolean preference. No hidden width multiplier is introduced.
+
+The real model was regenerated with pitch 4 mm, height 1.5 mm, angle 45 degrees,
+resolution 16, width 6 mm and all edges enabled. Review PNGs:
+`/tmp/auzyron-border-review/gentle-continuous-upper-back.png` and
+`gentle-continuous-lower-back.png`. Close-ups show the continuous finish without
+the exposed gray patches. The regression suite passes 80 tests, including skin
+clearance, the longer transition and unchanged central relief.
+
+The rest of this document records the preceding experiment, not the new outer
+skin behavior. User visual acceptance of this follow-up is still pending.
+
 ## Checkpoint and scope
 
 The user-approved baseline is `f3a6384`, pushed to `origin/main` before this
