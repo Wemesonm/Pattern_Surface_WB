@@ -11,6 +11,75 @@ spec.loader.exec_module(geometry)
 
 
 class PeriodicClosureTest(unittest.TestCase):
+    def test_internal_carrier_seam_does_not_change_interior_pattern_topology(self):
+        # PAT-REQ-076: triangulating the same domain differently must not
+        # imprint a new horizontal seam into the interior of the relief.
+        def v(x,y):
+            return {"q":[x,y],"p":[x,y,0],"n":[0,0,1]}
+        def rectangle(y0,y1):
+            a,b,c,d=v(0,y0),v(12,y0),v(0,y1),v(12,y1)
+            return [{"v":[a,b,c]}, {"v":[b,d,c]}]
+        results=[]
+        for carrier in (rectangle(0,12),rectangle(0,5.137)+rectangle(5.137,12)):
+            data=geometry.build({"bounds":[0,12,0,12],"carrier_triangles":carrier},
+                                {"resolution":4,"diamond_height":4,"diamond_side":4})
+            interior=[]
+            for face in data["faces"][:data["stats"]["outer_faces"]]:
+                points=[tuple(round(x,6) for x in data["vertices"][i]) for i in face]
+                if all(3<p[0]<9 and 3<p[1]<9 for p in points):
+                    interior.append(tuple(sorted(tuple(round(x,6) for x in p) for p in points)))
+            self.assertTrue(interior)
+            results.append(sorted(interior))
+        self.assertEqual(*results)
+
+    def test_trimmed_and_complete_wrap_keep_inclined_normal_component(self):
+        # PAT-REQ-076: a remote rim cut must not remove the axial component
+        # of relief on a taper/fillet. Check geometry, including rotation.
+        for trimmed in (False, True):
+            for rotated in (False, True):
+                def rotate(p):
+                    return [p[2],p[0],p[1]] if rotated else list(p)
+                def vertex(i, row):
+                    angle = 2*math.pi*i/64
+                    z = row*(8 - (0.8*(1+math.cos(angle)) if trimmed else 0))
+                    r = 10 + 0.3*z
+                    n = geometry._unit([math.cos(angle),math.sin(angle),-0.3])
+                    return {"q":[24*i/64,z],
+                            "p":rotate([r*math.cos(angle),r*math.sin(angle),z]),
+                            "n":rotate(n)}
+                carrier=[]
+                for i in range(64):
+                    a,b,c,d=vertex(i,0),vertex(i+1,0),vertex(i,1),vertex(i+1,1)
+                    carrier.extend([{"v":[a,b,c]}, {"v":[b,d,c]}])
+                payload={"carrier_triangles":carrier,"bounds":[0,24,0,8],
+                         "grid":{"origin":[0,0]},
+                         "periodic_adjustments":[{"axis":0,"period":24,"lower":0}]}
+                result=geometry.build(payload,{"diamond_height":4,"diamond_side":4,
+                                               "pyramid_height":1,"resolution":4})
+                self.assertEqual(0,result["stats"]["bad_edges_before_weld"])
+                self.assertEqual(not trimmed,result["stats"].get("algorithm")=="regular_sampled_facets")
+                vertices=result["vertices"];half=len(vertices)//2
+                for outer,inner in zip(vertices[:half],vertices[half:]):
+                    if rotated:
+                        outer=[outer[1],outer[2],outer[0]]
+                        inner=[inner[1],inner[2],inner[0]]
+                    theta=math.atan2(inner[1],inner[0])
+                    tangent=[0.3*math.cos(theta),0.3*math.sin(theta),1]
+                    delta=geometry._sub(outer,inner)
+                    self.assertLess(abs(geometry._dot(delta,tangent)),0.003)
+
+    def test_periodic_tolerance_is_per_repeated_cell(self):
+        # PAT-REQ-072: a long perimeter must not accumulate cell-size error.
+        height = 12.0
+        requested_side = 2 * height / math.sqrt(3)
+        payload = {"grid": {"origin": [0, 0]},
+                   "periodic_adjustments": [{"axis": 0, "period": 53 * (requested_side + .06), "lower": 0}]}
+        fitted = geometry.dimensions(payload, {"diamond_height": height, "closure_fit_tolerance": .1})
+        self.assertEqual(53, fitted["modules"])
+        self.assertAlmostEqual(requested_side + .06, fitted["side"])
+        with self.assertRaises(ValueError):
+            geometry.dimensions(payload, {"diamond_height": height, "closure_fit_tolerance": .01})
+
     def test_approved_september6_vertices_faces_and_relief_are_unchanged(self):
         # PAT-REQ-071: golden output computed from the recovered September 6
         # source, including all coordinates, face indices and facet identities.

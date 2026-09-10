@@ -10,6 +10,8 @@ DIAMOND_COMMAND_ID = "PatternSurface_Pattern_Diamond"
 BOLEADO_COMMAND_ID = "PatternSurface_Pattern_Boleado"
 DIAMOND_PROTOTYPE_COMMAND_ID = "PatternSurface_Pattern_DiamondPrototype"
 DIAMOND_PROTOTYPE_V2_COMMAND_ID = "PatternSurface_Pattern_DiamondPrototypeV2"
+BLENDER_GROUP_COMMAND_ID = "PatternSurface_BlenderPatterns"
+BLENDER_RIBS_COMMAND_ID = "PatternSurface_Blender_DiagonalRibs"
 ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "pattern_tools.svg")
 DIAMOND_ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "diamond.svg")
 BOLEADO_ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "boleado.svg")
@@ -89,6 +91,23 @@ class PatternToolsGroup:
 
         maybe_reload(registry)
         return tuple(item["command_id"] for item in registry.patterns())
+
+    def GetDefaultCommand(self):
+        return 0
+
+    def IsExclusive(self):
+        return False
+
+
+class BlenderPatternsGroup:
+    """Same drop-down pattern list used by native Pattern Tools."""
+
+    def GetResources(self):
+        return {"Pixmap": ICON, "MenuText": "Blender Patterns",
+                "ToolTip": "Choose a Blender surface pattern"}
+
+    def GetCommands(self):
+        return ("PatternSurface_Blender_Diamond", BLENDER_RIBS_COMMAND_ID)
 
     def GetDefaultCommand(self):
         return 0

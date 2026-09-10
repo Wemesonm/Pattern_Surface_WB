@@ -291,6 +291,15 @@ while old documents and commands depend on them.
 
 ## Acceptance Tests
 
+`MAP-REQ-063` **Implemented** — Curved carrier cells that cross a native trimmed
+face boundary must be intersected with that domain, not retained or discarded
+by a centroid test. Preserve the regular carrier on rectangular parameter
+domains. Boundary approximation must follow native tessellation tolerance,
+including sloped rims and holes; no face IDs or global axes are special-cased.
+Validated with rectangular and inclined cylindrical domains, rotated geometry,
+a native hole, and the unchanged 2,642-triangle four-face integration baseline.
+This does not declare a new visually approved mapping baseline.
+
 Automated:
 
 - preserve the approved carrier count and sampled seam agreement;

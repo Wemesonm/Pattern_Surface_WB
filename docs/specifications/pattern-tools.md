@@ -1,6 +1,29 @@
 # Pattern Tools Specification
 
+## Boundary correction validation — 2026-09-10
+
+The bridge now refreshes native trimmed curved carrier domains and cuts displaced
+relief using supporting planes supplied by adjacent, unselected CAD faces
+(DATA-REQ-053). It uses the Exact solver; the Manifold solver produced an
+overlapping rear cap despite reporting a closed mesh and was rejected visually.
+This is a geometric rule, not a face-index, object-name or world-axis exception.
+Native Diamond and Trim construction are unchanged. Arbitrary nonplanar boundary
+cutting envelopes remain outside the planar-support guarantee; do not describe
+this validation as proof for every possible surface topology.
+
 ## Purpose and Ownership
+
+`PAT-REQ-076` **Implemented** — Complete strips and trimmed curved domains must
+use the same full local-normal relief offset, including lower fillets. The
+superseded longitudinal projection from PAT-REQ-070 must not survive in the
+trimmed-domain path. Interior facet subdivisions must not follow internal CAD
+carrier seams: use the regular lattice and intersect only partially covered
+samples with the carrier domain. Preserve boundary clipping and PAT-REQ-071 golden
+geometry. Validate interior topology independence, inclined normals and rotated geometry, plus the approved
+real-model border cut. User requested 2026-09-10 after comparing both paths.
+The clipped-domain path interpolates the native CAD normal field: derivatives
+of clipped carrier chords introduced normal jumps at trims. Regular strips
+retain the approved historical sampler and its golden coordinates.
 
 Pattern Tools creates registered patterns on a Map Faces logical coordinate
 system. Each pattern package owns its lattice, parameters, cell construction,
@@ -46,6 +69,25 @@ registered pattern supplies its visible label, icon, and owned parameter dialog.
 `PAT-REQ-012` **Baseline** - Selecting a pattern opens only that pattern's
 parameter interface. Cancelling returns without creating or modifying document
 objects.
+
+`PAT-REQ-077` **Implemented** — Blender-backed patterns are presented through one
+`Blender Patterns` toolbar/menu group, matching the native Pattern Tools list.
+The group contains the existing Blender Diamond command and Diagonal Ribs;
+patterns do not occupy independent workbench toolbar buttons.
+
+`PAT-REQ-078` **Implemented** — Diagonal Ribs is a FreeCAD workbench command
+backed by a continuous Blender height-field generator. It owns spacing, relief height, logical angle and sampling
+resolution. The height field follows the map's local normal field, fits phase
+across an axis-0 periodic seam, clips every sample to the physical carrier and
+returns a closed backing-and-side-wall relief mesh. It consumes Map Faces but
+does not modify native Diamond or Trim Surface. Its dense continuous mesh is
+welded before the boundary cut and does not run Diamond's degenerate-face
+cleanup, because that cleanup can reopen a valid smooth height field.
+
+`PAT-REQ-079` **Implemented** — Every interactive Blender job starts by
+removing Blender's factory-scene objects. The opened scene contains only the
+Auzyron CAD body, the generated pattern, and the hidden source-body copy used
+by the bridge; it does not retain the default Cube, Camera, or Light.
 
 ## Diamond Pattern
 
@@ -384,3 +426,55 @@ regression, unaligned-rim clipping and existing planar/density checks. Installat
 symlink verified. Only geometry_closed.py, worker.py and the command's sampling
 default changed in runtime. Recovery checkpoint:
 `.checkpoints/20260908T231602Z_before_approved_sept6_sampling_restore`.
+
+`PAT-REQ-072` **Specified** — For a periodic Blender Diamond map, closure
+tolerance applies to the size correction for each repeated Diamond cell, never
+the accumulated correction around the entire closed perimeter. This preserves
+the requested physical size on large parts while still rejecting a visibly large
+per-cell distortion. User requested 2026-09-10.
+
+`PAT-REQ-073` **Specified** — At an open boundary of a periodic mapped
+strip, Blender Diamond must preserve complete boundary pyramids and apply an
+exact boundary cut equivalent to the approved FreeCAD Full Pattern plus Trim
+Surface workflow. The cut may not fade, flatten, or otherwise change a pyramid
+plane at the rim. The rule applies by logical boundary coordinates and is
+independent of part shape, face names, and world axes. The synchronous FreeCAD
+BRep implementation was deliberately removed on 2026-09-10 because it blocks
+the FreeCAD UI on production-sized maps; the replacement must run outside the
+FreeCAD UI process. User requested 2026-09-10.
+
+`PAT-REQ-074` **Specified** — The exact boundary workflow applies to
+every open boundary recorded by Map Faces as an external BRep segment, including
+filleted, cutout, or otherwise non-rectangular maps. It must not infer a border
+from carrier-triangle incidence, because a conforming carrier may contain
+internal T-junctions. Periodic seam copies are never treated as open rims. User
+requested 2026-09-10.
+
+`PAT-REQ-075` **Superseded by PAT-REQ-071** — The experimental native Trim
+compound plus Blender MANIFOLD union was withdrawn with the user's rollback
+request on 2026-09-10. A closed mesh on the four-face fixture was insufficient
+evidence for boundary correctness or performance on the user's actual piece.
+Do not reintroduce this experiment as an approved baseline.
+
+Rollback review (2026-09-10): restored geometry, worker and packaging from
+`e402c05`, retaining only per-cell closure tolerance and asynchronous Blender
+launch. The failed actual job reported `The selected-face Pocket cutter is not
+closed.` It left the auxiliary cutter visible before importing the CAD body.
+The `boundary_pocket` flag had bypassed both the tested trapezoidal planar path
+and the approved regular periodic path. These overrides were removed.
+
+The actual 16-face map contains 12,851 carrier triangles and 494 external
+segments. Four curved upper faces have no external segments in that payload.
+There are 1,013 unmatched physical carrier edges absent from external segments;
+this count includes possible nonconforming internal seams, not just true rims.
+Future boundary work must establish complete native CAD boundary loops and
+separate internal seams before constructing any trimming volume. Acceptance
+must measure border coverage and excess against the CAD contour, preserve
+pyramid planes, and inspect sloped planar-to-curved transitions. Manifold counts
+alone do not establish these properties. PAT-REQ-073/074 remain pending.
+
+The actual-job CAD comparison also found that the curved map carrier already
+exceeds the native upper rim by 1.044029 mm before displacement. The restored
+relief exceeds it by 1.120704 mm while passing the manifold check. See
+[`../blender-border-review-2026-09-10.md`](../blender-border-review-2026-09-10.md)
+for evidence and the required boundary acceptance checks.

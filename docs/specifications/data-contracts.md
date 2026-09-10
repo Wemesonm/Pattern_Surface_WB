@@ -8,6 +8,23 @@ breaking consumers that follow these contracts.
 
 ## Schema Rules
 
+`DATA-REQ-053` **Implemented** — Blender packaging refreshes legacy trimmed curved
+carrier domains from referenced CAD faces without rewriting saved maps. Optional
+`boundary_support_planes` contains origin/normal pairs from adjacent native
+planar faces only when the complete selected surface lies on their inside side.
+These are physical trimming constraints, independent of pattern dimensions.
+The Exact Blender cut preserves cavities and facets. Acceptance: rotated tube
+volume/cavity regression, native inclined cylinder tests and real saved-map
+packaging without modifying MapPayloadChunks (2026-09-10).
+
+`DATA-REQ-054` **Implemented** — Resolve near-coincident Exact cut contacts with a
+0.0002 mm outward numerical guard, then project retained outside vertices onto
+the original CAD support plane. The guard is not an allowance to enlarge the
+model: final boundary validation uses the original plane and 0.001 mm tolerance.
+This avoids overlapping cap sheets when full local-normal relief meets the rim.
+After projection, dissolve numerical degeneracies at 0.00001 mm; do not remesh
+or smooth the physical Diamond facets. Validate the result after this cleanup.
+
 `DATA-REQ-001` **Baseline** - Serialized payloads use compressed JSON stored in
 `App::PropertyStringList` chunks.
 
@@ -229,15 +246,23 @@ tests.
 
 ## Blender job package
 
-`DATA-REQ-050` **Specified** — Version 1 `auzyron.blender-job` JSON carries units
+`DATA-REQ-050` **Implemented** — Version 1 `auzyron.blender-job` JSON carries units
 `mm`, source document/map identity, complete public map payload, source-body
-mesh filename and Diamond parameters. The package contains no executable code
+ mesh filename and pattern-owned parameters. `geometry_module` identifies the
+ bundled generator and `pattern_label` identifies the resulting Blender object;
+ both default to the approved Diamond generator for compatible callers. The package contains no executable code
 from the document. A bundled worker reads it with JSON, creates a new result
 project, and writes a structured success/failure report for preflight. The
 package is transient: after the interactive Blender scene has loaded, the
 bridge removes the JSON, source mesh, reports, and any generated result files.
 Periodic fit and requested dimensions are recorded; source objects are never
 mutated.
+
+`DATA-REQ-055` **Implemented** — A job may select a bundled boundary solver.
+The default remains `EXACT`, preserving Diamond's approved path. Diagonal Ribs
+uses `MANIFOLD` only after its closed, welded height field is independently
+validated; the choice is stored in the transient job and does not alter native
+patterns or a saved document.
 
 `DATA-REQ-052` **Implemented** — Blender Diamond receives the requested
 `DiamondHeight`, `PatternHeight`, and closure tolerance from its own dialog.

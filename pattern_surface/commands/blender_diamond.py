@@ -6,7 +6,7 @@ import subprocess
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from ..blender_bridge.job import (_blender_binary, cleanup_jobs, create_job, run_job,
+from ..blender_bridge.job import (_blender_binary, cleanup_jobs, create_job,
                                   resolve_map, worker_path)
 from ..patterns.diamond import parameters as diamond_parameters
 
@@ -54,25 +54,10 @@ class BlenderDiamondCommand:
             }
             removed = cleanup_jobs()
             job_path = create_job(mapped, parameters)
-            report = run_job(job_path)
-            if report.get("status") not in ("success", "preview"):
-                details = []
-                for name, check in report.get("validation", {}).items():
-                    if isinstance(check, dict) and check.get("ready_for_export") is False:
-                        details.append("{}: {} nonmanifold edges, {} components".format(
-                            name, check.get("nonmanifold_edges", "?"),
-                            check.get("connected_components", "?")))
-                raise RuntimeError("{} {} Report: {}".format(
-                    report.get("error", "Blender job failed."),
-                    "; ".join(details), job_path.with_name("validation.json")))
             blender = _blender_binary()
             subprocess.Popen([blender, "--factory-startup", "--python",
                               str(worker_path()), "--", str(job_path),
                               "--interactive"])
-            if report.get("status") == "preview":
-                App.Console.PrintWarning(
-                    "Blender: Diamond opened a preview; inspect the scene before manual export. {}\n".format(
-                        report.get("warning", "Relief is not a closed export mesh.")))
             App.Console.PrintMessage(
                 "Blender: Diamond opened an unsaved scene (removed {} stale temporary job(s)).\n".format(removed)
             )

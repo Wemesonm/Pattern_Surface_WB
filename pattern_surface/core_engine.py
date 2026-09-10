@@ -677,6 +677,10 @@ def regular_curved_carrier(entry):
     fillets.  Those facets overlap many canonical cells in the atlas and make
     the point mapper jump between unrelated physical regions.
     """
+    from .mapping.trimmed_carrier import trimmed_curved_carrier
+    trimmed = trimmed_curved_carrier(entry)
+    if trimmed is not None:
+        return trimmed
     nx = max(1, int(math.ceil(entry["width"] / MAX_EDGE)))
     ny = max(1, int(math.ceil(entry["height"] / MAX_EDGE)))
     records = []

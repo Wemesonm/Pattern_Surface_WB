@@ -23,6 +23,13 @@ def _write_report(path, report):
     path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _clear_factory_scene():
+    """Remove Blender's startup objects before importing the Auzyron result."""
+    import bpy
+    for obj in list(bpy.context.scene.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+
 def _import_geometry(path):
     spec = importlib.util.spec_from_file_location("auzyron_geometry_closed", path)
     module = importlib.util.module_from_spec(spec)
@@ -177,6 +184,14 @@ def _finish_facets(obj):
     obj.data.update()
 
 
+def _smooth_relief(obj):
+    """Smooth a continuous height field while keeping its clipped rim crisp."""
+    attribute = obj.data.attributes.get("diamond_facet")
+    for index, polygon in enumerate(obj.data.polygons):
+        polygon.use_smooth = not attribute or attribute.data[index].value != 0
+    obj.data.update()
+
+
 def _validate(obj):
     import bmesh
     bm = bmesh.new()
@@ -281,6 +296,7 @@ def main():
         # begin with an empty scene and a valid VIEW_3D context.
         if not _interactive():
             bpy.ops.wm.read_factory_settings(use_empty=True)
+        _clear_factory_scene()
         bpy.context.scene.unit_settings.system = "METRIC"
         bpy.context.scene.unit_settings.length_unit = "MILLIMETERS"
         data = None
@@ -290,12 +306,27 @@ def main():
             # periodic closure and boundary geometry.
             relief = _import_stl(job["pattern_mesh"])
         else:
-            # Kept solely for version-1 packages created before the bridge
-            # exported final pattern meshes.
+            # Blender Diamond generates directly from the mapped CAD domain;
+            # the native FreeCAD Diamond command is not a prerequisite.
             geometry = _import_geometry(job["geometry_module"])
             data = geometry.build(job["map_payload"], job["parameters"])
-            relief = _mesh_object("Auzyron Diamond Relief", data, data["facet_ids"])
+            pattern_label = str(job.get("pattern_label", "Diamond"))
+            relief = _mesh_object("Auzyron {} Relief".format(pattern_label), data, data["facet_ids"])
             _recalculate_normals(relief)
+            if data.get("weld_relief"):
+                # Boundary samples arrive from adjacent carrier facets. Their
+                # coordinates may differ only by CAD tessellation round-off;
+                # weld them before the physical rim cut closes the shell.
+                _weld_mesh(relief)
+            supports = job["map_payload"].get("boundary_support_planes", [])
+            if supports:
+                boundary = _import_geometry(Path(__file__).with_name("boundary_clip.py"))
+                boundary.clip_support_planes(
+                    relief, supports, str(job.get("boundary_solver", "EXACT")))
+                # Remove numerical slivers after the guarded cut is projected
+                # back onto the CAD plane, without remeshing Diamond facets.
+                if data.get("cleanup_after_clip", True):
+                    _clean_planar_union(relief)
         body = _import_stl(job["body_mesh"])
         _weld_mesh(body, preserve_winding=True)
         body.name = "Source CAD Body"
@@ -307,7 +338,7 @@ def main():
         source_copy.hide_render = True
         final = body.copy()
         final.data = body.data.copy()
-        final.name = "Auzyron Diamond Union"
+        final.name = "Auzyron {} Union".format(str(job.get("pattern_label", "Diamond")))
         bpy.context.collection.objects.link(final)
         bpy.data.objects.remove(body, do_unlink=True)
         # A copied mesh can retain Blender's stale bounding box.  The Boolean
@@ -321,7 +352,7 @@ def main():
         # of imported CAD meshes it can collapse a valid relief into a strip.
         mode = "body_plus_pattern"
         final.name = "Auzyron CAD Body"
-        relief.name = "Auzyron Diamond Pattern"
+        relief.name = "Auzyron {} Pattern".format(str(job.get("pattern_label", "Diamond")))
         final.hide_set(False)
         final.hide_viewport = False
         final.hide_render = False
@@ -409,7 +440,7 @@ def main():
             bpy.data.collections.remove(operands)
             removed_sheets = _clean_planar_union(final)
             bpy.context.view_layer.update()
-            final.name = "Auzyron Diamond Final"
+            final.name = "Auzyron {} Final".format(str(job.get("pattern_label", "Diamond")))
             relief.select_set(False)
             relief.hide_set(True)
             relief.hide_render = True
@@ -423,7 +454,9 @@ def main():
                           "surface_check": surface_check,
                           "zero_thickness_boolean_sheets_removed": removed_sheets,
                           "ready_for_export": result["ready_for_export"] and retains_body and surface_check["passed"]}
-        if data and data.get("stats", {}).get("algorithm") != "regular_sampled_facets":
+        if data and data.get("smooth_relief"):
+            _smooth_relief(relief)
+        elif data and data.get("stats", {}).get("algorithm") != "regular_sampled_facets":
             for obj in bpy.context.scene.objects:
                 if obj.type == "MESH" and obj.data.attributes.get("diamond_facet"):
                     _finish_facets(obj)

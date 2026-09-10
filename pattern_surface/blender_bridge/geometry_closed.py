@@ -6,6 +6,19 @@ from collections import Counter
 EPS = 1.0e-9
 
 
+def _subdivide_facet(triangle, subdivisions):
+    """Uniform barycentric samples, independent of carrier triangulation."""
+    a, b, c = triangle
+    def blend(i, j):
+        return tuple((a[k] * (subdivisions-i-j) + b[k]*i + c[k]*j) / subdivisions
+                     for k in range(3))
+    for i in range(subdivisions):
+        for j in range(subdivisions-i):
+            yield (blend(i,j), blend(i+1,j), blend(i,j+1))
+            if i+j < subdivisions-1:
+                yield (blend(i+1,j), blend(i+1,j+1), blend(i,j+1))
+
+
 def _cross(a, b, c):
     return ((b[0] - a[0]) * (c[1] - a[1]) -
             (b[1] - a[1]) * (c[0] - a[0]))
@@ -118,7 +131,7 @@ def dimensions(payload, params):
         period = float(fit["period"])
         modules = max(1, round(period / requested_side))
         tolerance = float(params.get("closure_fit_tolerance", 0.2))
-        if abs(modules * requested_side - period) > tolerance + 1.0e-8:
+        if abs(period / modules - requested_side) > tolerance + 1.0e-8:
             raise ValueError("Periodic Diamond closure exceeds the configured tolerance.")
         side, origin[0] = period / modules, float(fit.get("lower", origin[0]))
     return {"diamond_height": height, "relief": relief, "side": side,
@@ -428,19 +441,6 @@ def _build_regular_sampled(payload, dim):
             backing.append(value[1])
         return vertex_cache[key]
 
-    def subdivide(triangle):
-        a, b, c = triangle
-        def blend(i, j):
-            return tuple((a[k] * (subdivisions - i - j) +
-                          b[k] * i + c[k] * j) / subdivisions
-                         for k in range(3))
-        for i in range(subdivisions):
-            for j in range(subdivisions - i):
-                yield (blend(i, j), blend(i + 1, j), blend(i, j + 1))
-                if i + j < subdivisions - 1:
-                    yield (blend(i + 1, j), blend(i + 1, j + 1),
-                           blend(i, j + 1))
-
     facet = 0
     vertex_cache = {}
     row0 = math.floor((min_y - origin[1]) / row_height) - 1
@@ -461,7 +461,7 @@ def _build_regular_sampled(payload, dim):
                 for corner in range(3):
                     polygon = [lattice[corner], lattice[(corner + 1) % 3], apex]
                     for index in range(1, len(polygon) - 1):
-                        for small in subdivide((polygon[0], polygon[index], polygon[index + 1])):
+                        for small in _subdivide_facet((polygon[0], polygon[index], polygon[index + 1]), subdivisions):
                             pieces = [small]
                             if not aligned_rows:
                                 # Preserve the uniform facet interior; only cut
@@ -632,29 +632,11 @@ def build(payload, params):
             mapped_cache[key] = None
             return None
         physical, carrier_normal = value
-        # Blend the placement normal from neighboring physical points.  This
-        # removes the serrated strip caused by switching source faces while
-        # keeping every generated triangle flat and faceted.
-        window = min(side, row_height) * 0.02
-        left = raw_point((point[0] - window, point[1]))
-        right = raw_point((point[0] + window, point[1]))
+        # The native CAD normal field is continuous across tangent source
+        # faces. Finite differences of clipped carrier triangles can instead
+        # measure tessellation chords, or jump when a neighbor crosses a trim.
+        # Use the interpolated CAD field for this boundary-aware path.
         normal = carrier_normal
-        # Derive the normal from the mapped positions at every node. Using a
-        # carrier face normal here makes adjacent source triangles choose
-        # different offsets at the same logical grid seam; that creates the
-        # self-overlap which later breaks Blender's Boolean. The finite
-        # difference is continuous across those seams and matches the
-        # analytic tangent frame used by the original Blender reconstruction.
-        down = raw_point((point[0], point[1] - window))
-        up = raw_point((point[0], point[1] + window))
-        if left and right and down and up:
-            tangent_u = _sub(right[0], left[0])
-            tangent_v = _sub(up[0], down[0])
-            candidate = _unit(_cross3(tangent_u, tangent_v))
-            if candidate is not None:
-                if _dot(candidate, carrier_normal) < 0.0:
-                    candidate = _scale(candidate, -1.0)
-                normal = candidate
         mapped_cache[key] = (physical, normal)
         return mapped_cache[key]
 
@@ -663,13 +645,10 @@ def build(payload, params):
         if value is None:
             return None
         physical, normal = value
-        # PAT-REQ-070: match the September 6 lower-fillet displacement.
-        # Retain the longitudinal coordinate; do not normalize the residual,
-        # so the radial amplitude tapers naturally with the rounded surface.
-        direction = normal
-        if period is not None and axis is not None:
-            direction = _sub(normal,_scale(axis,_dot(normal,axis)))
-        outer = _add(physical, _scale(direction, point[2] + dim["finish_offset"]))
+        # PAT-REQ-076: use the same full normal as the regular strip path.
+        # Removing its longitudinal component changes the fillet relief merely
+        # because another part of the domain has a trimmed boundary.
+        outer = _add(physical, _scale(normal, point[2] + dim["finish_offset"]))
         inner = _sub(physical, _scale(normal, dim["contact"]))
         return outer, inner
 
@@ -714,25 +693,27 @@ def build(payload, params):
                 apex = (center[0], center[1], dim["relief"])
                 for corner in range(3):
                     polygon = [lattice[corner], lattice[(corner + 1) % 3], apex]
-                    # Clip the full planar pyramid facet. Splitting it before
-                    # clipping creates T-junctions where a carrier boundary
-                    # meets the artificial subdivision grid, which then makes
-                    # the closing side wall nonmanifold. The carrier triangles
-                    # already provide the surface-following refinement.
-                    for carrier_triangle in overlapping_carriers(polygon):
-                        clipped = _clip(
-                            polygon,
-                            [vertex["q"] for vertex in carrier_triangle["v"]],
-                        )
-                        for vertex_index in range(1, len(clipped) - 1):
-                            fragment = [clipped[0], clipped[vertex_index],
-                                        clipped[vertex_index + 1]]
-                            if abs(_cross(*fragment)) <= EPS:
-                                continue
-                            ids = [add_vertex(point) for point in fragment]
-                            if None not in ids and len(set(ids)) == 3:
-                                faces.append(tuple(ids))
-                                facet_ids.append(facet + 1)
+                    # PAT-REQ-076: the carrier defines the domain, not the
+                    # tessellation inside each complete Diamond facet sample.
+                    for small in _subdivide_facet(polygon, subdivisions):
+                        clips = []
+                        for carrier_triangle in overlapping_carriers(small):
+                            clipped = _clip(small, [vertex["q"] for vertex in carrier_triangle["v"]])
+                            if len(clipped) >= 3:
+                                clips.append(clipped)
+                        covered_area = sum(abs(_cross(poly[0], poly[k], poly[k+1]))
+                                           for poly in clips for k in range(1, len(poly)-1))
+                        if abs(covered_area - abs(_cross(*small))) <= 1e-8:
+                            clips = [small]
+                        for clipped in clips:
+                            for vertex_index in range(1, len(clipped)-1):
+                                fragment = [clipped[0], clipped[vertex_index], clipped[vertex_index+1]]
+                                if abs(_cross(*fragment)) <= EPS:
+                                    continue
+                                ids = [add_vertex(point) for point in fragment]
+                                if None not in ids and len(set(ids)) == 3:
+                                    faces.append(tuple(ids))
+                                    facet_ids.append(facet+1)
                     facet += 1
     if not faces:
         raise ValueError("No Diamond cell intersects the mapped carrier.")

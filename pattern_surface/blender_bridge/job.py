@@ -155,7 +155,8 @@ def worker_path():
     return Path(__file__).with_name("worker.py")
 
 
-def create_job(map_object, parameters, root=None, pattern_object=None):
+def create_job(map_object, parameters, root=None, pattern_object=None,
+               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT"):
     """Export the source body and map data into a transient Blender job."""
 
     map_object = resolve_map(map_object)
@@ -163,6 +164,8 @@ def create_job(map_object, parameters, root=None, pattern_object=None):
         raise ValueError("Select a Mapped Surface or Mapping Grid first.")
     document = map_object.Document
     payload = _payload(map_object)
+    from .reference import prepare_reference
+    payload = prepare_reference(document, payload)
     records = payload.get("faces", [])
     objects = []
     seen = set()
@@ -194,7 +197,9 @@ def create_job(map_object, parameters, root=None, pattern_object=None):
         "body_mesh": str(body_path),
         "body_topology": body_topology,
         "parameters": dict(parameters),
-        "geometry_module": str(Path(__file__).with_name("geometry_closed.py")),
+        "geometry_module": str(geometry_module or Path(__file__).with_name("geometry_closed.py")),
+        "pattern_label": str(pattern_label),
+        "boundary_solver": str(boundary_solver),
         "output_dir": str(directory),
     }
     # An optional final pattern is supported for future export-only workflows,
