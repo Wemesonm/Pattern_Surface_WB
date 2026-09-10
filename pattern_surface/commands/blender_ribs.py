@@ -40,7 +40,8 @@ class BlenderDiagonalRibsCommand:
             module = Path(__file__).parents[1] / "blender_bridge" / "geometry_ribs.py"
             job_path = create_job(mapped, values, geometry_module=module,
                                   pattern_label="Diagonal Ribs",
-                                  boundary_solver="MANIFOLD")
+                                  boundary_solver="MANIFOLD",
+                                  include_boundary_curves=values.get("base_blend", 0) > 0)
             subprocess.Popen([_blender_binary(), "--factory-startup", "--python",
                               str(worker_path()), "--", str(job_path), "--interactive"])
             App.Console.PrintMessage(

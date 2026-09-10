@@ -14,6 +14,74 @@ def _module():
 
 
 class BlenderRibsTests(unittest.TestCase):
+    def test_transition_sampling_limit_precedes_boundary_allocation(self):
+        # PAT-REQ-080: reject impractical density before any large index allocation.
+        from unittest.mock import patch
+        ribs = _module()
+        payload = {"bounds": [0, 100, 0, 100], "carrier_triangles": [{}]}
+        with patch.object(ribs, "BoundaryDistance") as index:
+            with self.assertRaisesRegex(ValueError, "sampling limit"):
+                ribs.build(payload, {"base_blend": 0.001})
+            index.assert_not_called()
+
+    def test_t_junction_is_joined_before_closing_the_shell(self):
+        # PAT-REQ-080: unequal subdivisions must not produce internal side walls.
+        from collections import Counter
+        ribs = _module()
+        vertices = [(0, 0), (2, 0), (0, 2), (1, 1), (2, 2)]
+        faces = [(0, 1, 2), (1, 4, 3), (3, 4, 2)]
+        def add_vertex(point):
+            vertices.append(point)
+            return len(vertices)-1
+        result, _ = ribs._stitch_surface(faces, [0, 1, 1], vertices, add_vertex, None, 1)
+        incidence = Counter(tuple(sorted((a, b))) for f in result
+                            for a, b in zip(f, f[1:]+f[:1]))
+        self.assertNotIn((1, 2), incidence)
+        self.assertEqual(2, incidence[(1, 3)])
+        self.assertEqual(2, incidence[(2, 3)])
+        self.assertEqual({(0, 1), (0, 2), (1, 4), (2, 4)},
+                         {edge for edge, count in incidence.items() if count == 1})
+
+    def test_native_transition_reaches_every_edge_and_preserves_interior(self):
+        ribs = _module()
+        def v(x, y):
+            return {"q": [x, y], "p": [x, y, 0], "n": [0, 0, 1]}
+        a, b, c, d = v(0, 0), v(12, 0), v(0, 12), v(12, 12)
+        curves = [{"points": [a["p"], b["p"]], "inward_y": [1]},
+                  {"points": [c["p"], d["p"]], "inward_y": [-1]},
+                  {"points": [a["p"], c["p"]], "inward_y": [0]},
+                  {"points": [b["p"], d["p"]], "inward_y": [0]}]
+        payload = {"bounds": [0, 12, 0, 12], "native_boundary_curves": {"curves": curves},
+                   "carrier_triangles": [{"v": [a, b, c]}, {"v": [b, d, c]}]}
+        params = {"rib_pitch": 12, "resolution": 24}
+        baseline = ribs.build(payload, params)
+        self.assertEqual(baseline, ribs.build(payload, dict(params, base_blend=0)))
+        result = ribs.build(payload, dict(params, base_blend=3, blend_all_edges=True))
+        self.assertEqual(0, result["stats"]["bad_edges_before_weld"])
+        for before, after in zip(baseline["vertices"][:len(baseline["vertices"])//2],
+                                 result["vertices"][:len(result["vertices"])//2]):
+            x, y, z = after
+            if min(x, y, 12-x, 12-y) < 1e-7:
+                self.assertAlmostEqual(-0.02, z)
+            if min(x, y, 12-x, 12-y) >= 3:
+                self.assertAlmostEqual(before[2], z)
+        lower = ribs.build(payload, dict(params, base_blend=3))
+        for before, after in zip(baseline["vertices"][:len(baseline["vertices"])//2],
+                                 lower["vertices"][:len(lower["vertices"])//2]):
+            if after[1] >= 3:
+                self.assertAlmostEqual(before[2], after[2])
+
+    def test_transition_requires_native_boundary_and_uses_physical_distance(self):
+        ribs = _module()
+        with self.assertRaisesRegex(ValueError, "Native CAD boundaries"):
+            ribs.BoundaryDistance({"external_segments": []}, 3, True)
+        payload = {"native_boundary_curves": {"curves": [
+            {"points": [[10, 20, 30], [10, 20, 40]], "inward_y": [1], "component": 2}]}}
+        distance = ribs.BoundaryDistance(payload, 3, True)
+        self.assertAlmostEqual(1, distance.distance((11, 20, 35), 2))
+        self.assertAlmostEqual(3, distance.distance((11, 20, 35), 0))
+        self.assertAlmostEqual(0, distance.distance((10, 20, 35), 2))
+
     def test_rectangular_domain_is_closed_and_has_variable_relief(self):
         ribs = _module()
 

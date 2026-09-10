@@ -8,6 +8,14 @@ breaking consumers that follow these contracts.
 
 ## Schema Rules
 
+`DATA-REQ-056` **Implemented** — Optional transient `native_boundary_curves` are
+sampled from native selected-face wire edges with 0.005 mm chord tolerance.
+Shared selected edges and periodic seams are excluded by topological incidence,
+never triangle incidence. Records retain component, source face, ordered physical
+points and inward atlas direction for lower-edge classification. Extraction must
+verify closed boundary cycles and must not rewrite saved maps. Legacy readers
+ignore this optional field; Diamond does not request it.
+
 `DATA-REQ-053` **Implemented** — Blender packaging refreshes legacy trimmed curved
 carrier domains from referenced CAD faces without rewriting saved maps. Optional
 `boundary_support_planes` contains origin/normal pairs from adjacent native

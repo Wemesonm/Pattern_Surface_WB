@@ -1,5 +1,17 @@
 # Pattern Tools Specification
 
+`PAT-REQ-080` **Implemented** — Diagonal Ribs offers a rounded edge transition
+(default 3 mm, zero disables) and an option to apply it to all native boundaries.
+Default lower-edge classification follows the inward atlas row direction, not
+world axes. Measure physical distance to complete native CAD boundary curves,
+excluding selected-face seams. Smoothly reduce relief to the source wall at the
+boundary with zero endpoint slope, preserving interior ribs and phase. Include
+the finish offset in the transition to avoid leaving a ledge. Spatial indexing
+must bound query cost; missing curve data must fail rather than fall back to
+atlas bounds or legacy external segments. Test curved/sloped rims, holes,
+periodic seams, rotations, disabled equivalence and the real saved CAD model.
+Acceptance evidence and limitations: [native edge transition review](../ribs-edge-transition-2026-09-10.md).
+
 ## Boundary correction validation — 2026-09-10
 
 The bridge now refreshes native trimmed curved carrier domains and cuts displaced
