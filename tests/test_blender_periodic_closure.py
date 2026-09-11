@@ -11,6 +11,42 @@ spec.loader.exec_module(geometry)
 
 
 class PeriodicClosureTest(unittest.TestCase):
+    def test_diamond_concave_transition_selects_map_lower_or_upper_rim(self):
+        # PAT-REQ-084: rim choice follows Map Faces' local inward direction,
+        # never a FreeCAD/Blender world axis.
+        def v(x, y):
+            return {"q": [x, y], "p": [x, y, 0], "n": [0, 0, 1]}
+        a, b, c, d = v(0, 0), v(12, 0), v(0, 12), v(12, 12)
+        curves = [{"points": [a["p"], b["p"]], "inward_y": [1]},
+                  {"points": [c["p"], d["p"]], "inward_y": [-1]},
+                  {"points": [a["p"], c["p"]], "inward_y": [0]},
+                  {"points": [b["p"], d["p"]], "inward_y": [0]}]
+        payload = {"bounds": [0, 12, 0, 12],
+                   "native_boundary_curves": {"curves": curves},
+                   "carrier_triangles": [{"v": [a, b, c]}, {"v": [b, d, c]}]}
+        params = {"diamond_height": 4, "diamond_side": 4,
+                  "pyramid_height": 1.5, "resolution": 2, "base_blend": 3}
+        lower = geometry.build(payload, params)
+        upper = geometry.build(payload, dict(params, edge_transition="upper"))
+        both = geometry.build(payload, dict(params, edge_transition="both"))
+        lower_outer = lower["vertices"][:len(lower["vertices"]) // 2]
+        upper_outer = upper["vertices"][:len(upper["vertices"]) // 2]
+        both_outer = both["vertices"][:len(both["vertices"]) // 2]
+        self.assertTrue(any(abs(point[1]) < 1e-7 and abs(point[2] - .045) < 1e-7
+                            for point in lower_outer))
+        self.assertTrue(any(abs(point[1] - 12) < 1e-7 and abs(point[2] - .045) < 1e-7
+                            for point in upper_outer))
+        self.assertTrue(all(abs(point[2] - .045) < 1e-7
+                            for point in lower_outer if abs(point[1]) < 1e-7))
+        lower_near = [point[2] for point in lower_outer if abs(point[1] - 2/3) < 1e-7]
+        upper_near = [point[2] for point in upper_outer if abs(point[1] - 2/3) < 1e-7]
+        self.assertTrue(lower_near and upper_near)
+        self.assertLess(max(lower_near), min(upper_near))
+        both_near_top = [point[2] for point in both_outer if abs(point[1] - 34/3) < 1e-7]
+        lower_near_top = [point[2] for point in lower_outer if abs(point[1] - 34/3) < 1e-7]
+        self.assertTrue(both_near_top and lower_near_top)
+        self.assertLess(max(both_near_top), min(lower_near_top))
+
     def test_internal_carrier_seam_does_not_change_interior_pattern_topology(self):
         # PAT-REQ-076: triangulating the same domain differently must not
         # imprint a new horizontal seam into the interior of the relief.

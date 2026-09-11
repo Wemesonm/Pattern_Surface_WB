@@ -1,5 +1,20 @@
 # Pattern Tools Specification
 
+`PAT-REQ-084` **Implemented** — Blender relief patterns that offer the
+concave native-rim transition shall let the user independently select the lower
+and upper map rims. Selecting both applies the transition to both rims;
+selecting neither disables it. The classification must
+use the Map Faces local inward atlas direction and native boundary curves,
+never a global axis, source face name or specific body topology. Diamond and
+Diagonal Ribs consume the same neutral boundary-distance and concave-envelope
+primitives but retain independent pattern lattices. The native FreeCAD Diamond
+command remains unchanged; these controls belong only to Blender Diamond.
+Blender Diamond also exposes its sampling resolution (1–40, default 8); this
+controls only its carrier-following facet refinement, not the requested physical
+diamond size. Test lower, upper, both-rim and disabled output on a rotated or
+arbitrary map contract and preserve the Diamond default output when the
+transition is disabled.
+
 `PAT-REQ-082` **Implemented** — Use a concave root envelope for Diagonal Ribs,
 not a scalar fade of the complete rib cross-section. The envelope starts tangent
 to the wall on the native boundary and rises with positive curvature. A smooth

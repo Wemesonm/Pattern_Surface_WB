@@ -23,6 +23,8 @@ _cross = _HELPERS._cross
 _interpolate = _HELPERS._interpolate
 _scale = _HELPERS._scale
 _sub = _HELPERS._sub
+BoundaryDistance = _HELPERS.NativeBoundaryDistance
+_concave_relief = _HELPERS.concave_relief
 
 
 def dimensions(payload, params):
@@ -42,45 +44,10 @@ def dimensions(payload, params):
         raise ValueError("Rib angle must be between -89 and 89 degrees.")
     if not 3 <= resolution <= 32:
         raise ValueError("Rib resolution must be between 3 and 32.")
+    edge_mode = "all" if params.get("blend_all_edges", False) else params.get("edge_transition", "lower")
     return {"pitch": pitch, "height": height, "angle": math.radians(angle),
             "resolution": resolution, "finish_offset": finish_offset,
-            "contact": contact, "blend": blend,
-            "all_edges": bool(params.get("blend_all_edges", False))}
-
-
-class BoundaryDistance:
-    """Bounded physical distance queries; no logical bounds or mesh-edge guesses."""
-
-    def __init__(self, payload, width, all_edges):
-        data = payload.get("native_boundary_curves")
-        if data is None:
-            raise ValueError("Native CAD boundaries are missing. Generate a new Ribs job from FreeCAD.")
-        self.width = width
-        self.buckets = {}
-        for curve in data["curves"]:
-            for index, (a, b) in enumerate(zip(curve["points"], curve["points"][1:])):
-                if not all_edges and curve["inward_y"][index] <= 0.1:
-                    continue
-                component = curve.get("component", 0)
-                ranges = [range(math.floor((min(a[i], b[i])-width)/width),
-                                math.floor((max(a[i], b[i])+width)/width)+1) for i in range(3)]
-                delta = tuple(b[i]-a[i] for i in range(3))
-                length2 = sum(v*v for v in delta)
-                if length2 <= 1e-16:
-                    continue
-                segment = (a, delta, length2)
-                for x in ranges[0]:
-                    for y in ranges[1]:
-                        for z in ranges[2]:
-                            self.buckets.setdefault((component, x, y, z), []).append(segment)
-
-    def distance(self, point, component=0):
-        key = (component,) + tuple(math.floor(value/self.width) for value in point)
-        best = self.width*self.width
-        for a, delta, length2 in self.buckets.get(key, ()):
-            ratio = max(0.0, min(1.0, sum((point[i]-a[i])*delta[i] for i in range(3))/length2))
-            best = min(best, sum((point[i]-a[i]-ratio*delta[i])**2 for i in range(3)))
-        return math.sqrt(best)
+            "contact": contact, "blend": blend, "edge_mode": edge_mode}
 
 
 def _period(payload):
@@ -151,28 +118,6 @@ def _stitch_surface(faces, facet_ids, logical_vertices, add_vertex, period, step
     return stitched, ids
 
 
-def _concave_relief(wave, distance, width, height):
-    """Concave wall-tangent root, smoothly joined to the unchanged rib wave.
-
-    The envelope is shared across the rib section instead of multiplying each
-    height by a fade. A wall-tangent elliptical sag grows into an unbounded
-    envelope; its smooth intersection tends to the original rib with zero
-    first and second derivative error at the end of the transition.
-    """
-    if wave <= 0.0:
-        return 0.0
-    if distance >= width:
-        return wave
-    t = max(0.0, distance / width)
-    sag = t*t / (1.0 + math.sqrt(max(0.0, 1.0-t*t)))
-    envelope = height * sag / ((1.0-t)*(1.0-t))
-    if envelope <= 0.0:
-        return 0.0
-    # Smooth everywhere: unlike a piecewise minimum, no narrow blend band
-    # develops pointed shoulders where a high rib meets the concave root.
-    return wave / math.hypot(1.0, wave/envelope)
-
-
 def build(payload, params):
     dim = dimensions(payload, params)
     carrier = list(payload.get("carrier_triangles", payload.get("triangles", [])))
@@ -218,7 +163,7 @@ def build(payload, params):
     if dim["blend"] and math.ceil((max_x-min_x)/step_x)*math.ceil((max_y-min_y)/step_y) > 1500000:
         raise ValueError("Requested ribs exceed the sampling limit. Increase spacing or transition width, or reduce resolution.")
     # Reject excessive resolution before allocating the physical boundary index.
-    boundary = BoundaryDistance(payload, dim["blend"], dim["all_edges"]) if dim["blend"] else None
+    boundary = BoundaryDistance(payload, dim["blend"], dim["edge_mode"]) if dim["blend"] else None
     buckets = {}
     for index, item in enumerate(domains):
         points = [vertex["q"] for vertex in item.get("v", [])]

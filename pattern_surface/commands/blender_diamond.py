@@ -42,18 +42,18 @@ class BlenderDiamondCommand:
             # Blender is the Diamond generator in this workflow.  Map Faces
             # only supplies the CAD surface and logical coordinates; it does
             # not require a Diamond result to exist in FreeCAD.
-            values = diamond_parameters.get_parameters(mapped)
+            values = diamond_parameters.get_parameters(mapped, blender=True)
             if values is None:
                 return
             parameters = {
                 **values,
                 "finish_offset": 0.045,
                 "contact": 0.25,
-                # Match the approved September 6 pattern sampling density.
-                "resolution": 8,
             }
             removed = cleanup_jobs()
-            job_path = create_job(mapped, parameters)
+            job_path = create_job(
+                mapped, parameters,
+                include_boundary_curves=parameters.get("base_blend", 0.0) > 0.0)
             blender = _blender_binary()
             subprocess.Popen([blender, "--factory-startup", "--python",
                               str(worker_path()), "--", str(job_path),

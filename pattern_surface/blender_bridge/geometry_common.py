@@ -77,3 +77,69 @@ def _clip(polygon, triangle):
                 result.append(tuple(current[k] + (following[k] - current[k]) * ratio
                                     for k in range(3)))
     return result
+
+
+class NativeBoundaryDistance:
+    """Distance to selected native CAD rims in map-local orientation.
+
+    ``inward_y`` comes from Map Faces' atlas, so lower/upper never means a
+    fixed global direction.  This makes the same edge finish usable on any
+    mapped surface, including rotated and curved bodies.
+    """
+
+    def __init__(self, payload, width, edge_mode="all"):
+        data = payload.get("native_boundary_curves")
+        if data is None:
+            raise ValueError("Native CAD boundaries are missing. Generate a new Blender job from FreeCAD.")
+        if isinstance(edge_mode, bool):  # compatibility with the first Ribs dialog
+            edge_mode = "all" if edge_mode else "lower"
+        if edge_mode not in ("lower", "upper", "both", "all"):
+            raise ValueError("Edge transition must be lower, upper, both, or all.")
+        self.width = width
+        self.buckets = {}
+        for curve in data["curves"]:
+            for index, (a, b) in enumerate(zip(curve["points"], curve["points"][1:])):
+                inward = curve["inward_y"][index]
+                if edge_mode == "lower" and inward <= 0.1:
+                    continue
+                if edge_mode == "upper" and inward >= -0.1:
+                    continue
+                if edge_mode == "both" and -0.1 <= inward <= 0.1:
+                    continue
+                component = curve.get("component", 0)
+                ranges = [range(math.floor((min(a[i], b[i]) - width) / width),
+                                math.floor((max(a[i], b[i]) + width) / width) + 1)
+                          for i in range(3)]
+                delta = tuple(b[i] - a[i] for i in range(3))
+                length2 = sum(value * value for value in delta)
+                if length2 <= 1e-16:
+                    continue
+                segment = (a, delta, length2)
+                for x in ranges[0]:
+                    for y in ranges[1]:
+                        for z in ranges[2]:
+                            self.buckets.setdefault((component, x, y, z), []).append(segment)
+
+    def distance(self, point, component=0):
+        key = (component,) + tuple(math.floor(value / self.width) for value in point)
+        best = self.width * self.width
+        for a, delta, length2 in self.buckets.get(key, ()):
+            ratio = max(0.0, min(1.0, sum((point[i] - a[i]) * delta[i]
+                                          for i in range(3)) / length2))
+            best = min(best, sum((point[i] - a[i] - ratio * delta[i]) ** 2
+                                 for i in range(3)))
+        return math.sqrt(best)
+
+
+def concave_relief(wave, distance, width, height):
+    """Return a wall-tangent, concave attenuation of a positive relief wave."""
+    if wave <= 0.0:
+        return 0.0
+    if distance >= width:
+        return wave
+    t = max(0.0, distance / width)
+    sag = t * t / (1.0 + math.sqrt(max(0.0, 1.0 - t * t)))
+    envelope = height * sag / ((1.0 - t) * (1.0 - t))
+    if envelope <= 0.0:
+        return 0.0
+    return wave / math.hypot(1.0, wave / envelope)

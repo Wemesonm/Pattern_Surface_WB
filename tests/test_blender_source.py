@@ -107,5 +107,5 @@ class BlenderSourceTests(unittest.TestCase):
     def test_blender_command_uses_the_diamond_dialog_without_requiring_a_result(self):
         from pattern_surface.commands import blender_diamond as command
         source = Path(command.__file__).read_text(encoding='utf-8')
-        self.assertIn('diamond_parameters.get_parameters(mapped)', source)
-        self.assertIn('create_job(mapped, parameters)', source)
+        self.assertIn('diamond_parameters.get_parameters(mapped, blender=True)', source)
+        self.assertIn('include_boundary_curves=parameters.get("base_blend", 0.0) > 0.0', source)
