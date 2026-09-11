@@ -164,6 +164,15 @@ class AssemblyCycleTests(unittest.TestCase):
             self.assertAlmostEqual(0, (20 - (-30)) % dim['side'])
         self.assertEqual([-30, 0, 0, 12], maps[1]['bounds'])
 
+    def test_common_map_phase_contains_no_diamond_dimension(self):
+        from pattern_surface.blender_bridge.job import _attach_shared_map_phase
+        maps = self.closed_maps()
+        phase_data = _attach_shared_map_phase(maps)
+        self.assertEqual({'origin', 'assembly_period'}, set(phase_data))
+        self.assertAlmostEqual(50, phase_data['assembly_period'])
+        self.assertEqual(phase_data, maps[0]['shared_map_phase'])
+        self.assertEqual(phase_data, maps[1]['shared_map_phase'])
+
     def test_open_chain_does_not_fit_a_period(self):
         maps, _ = phase.align([rectangle(0, 12), rectangle(12, 30)])
         self.assertIsNone(phase.assembly_cycle_period(maps))

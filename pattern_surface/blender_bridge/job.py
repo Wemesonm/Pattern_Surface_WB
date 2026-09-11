@@ -265,6 +265,26 @@ def _payloads_by_source_body(document, payload):
             for owner in owners]
 
 
+def _attach_shared_map_phase(payloads):
+    """Attach the pattern-neutral assembly phase to transient map payloads.
+
+    Registration already puts all compatible maps in one logical coordinate
+    system.  This record makes the reference origin and any complete assembly
+    loop available to every Blender pattern without selecting a lattice size.
+    """
+    if not payloads:
+        return {}
+    grid = payloads[0].get("grid", {}) or {}
+    phase = {"origin": [float(value) for value in grid.get("origin", [0.0, 0.0])[:2]]}
+    from .shared_phase import assembly_cycle_period
+    period = assembly_cycle_period(payloads)
+    if period is not None:
+        phase["assembly_period"] = float(period)
+    for payload in payloads:
+        payload["shared_map_phase"] = dict(phase)
+    return phase
+
+
 def _apply_shared_diamond_phase(payloads, parameters):
     """Attach one transient Diamond lattice to every shared job payload.
 
@@ -280,8 +300,10 @@ def _apply_shared_diamond_phase(payloads, parameters):
              "row_height": float(reference["row_height"]),
              "origin": [float(value) for value in reference["origin"][:2]],
              "modules": reference.get("modules")}
-    from .shared_phase import assembly_cycle_period
-    period = assembly_cycle_period(payloads)
+    common = payloads[0].get("shared_map_phase", {}) or {}
+    if not common:
+        common = _attach_shared_map_phase(payloads)
+    period = common.get("assembly_period")
     if period is not None:
         import math
         requested = float(parameters.get('diamond_side') or
@@ -354,6 +376,7 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
     if len(maps) > 1:
         from .shared_phase import align
         aligned, phase_records = align([item["map_payload"] for item in maps])
+        shared_map_phase = _attach_shared_map_phase(aligned)
         if str(pattern_label).strip().lower() == "diamond":
             _apply_shared_diamond_phase(aligned, parameters)
         for mapped, payload in zip(maps, aligned):
@@ -397,7 +420,8 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
     if len(maps) > 1:
         job["components"] = components
         job["shared_phase"] = {"reference_map": first_map["map_object"],
-                               "alignments": phase_records}
+                               "alignments": phase_records,
+                               "map_phase": shared_map_phase}
     # An optional final pattern is supported for future export-only workflows,
     # but Blender Diamond intentionally generates its relief from the map.
     if pattern_object is not None:

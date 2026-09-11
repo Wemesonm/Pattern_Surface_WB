@@ -12,12 +12,12 @@ not a named body, face count or screen direction. Validate a partial selection
 with an open lateral boundary, a closed relief shell and untouched full-height
 interior cells.
 
-`PAT-REQ-086` **Implemented** — Blender Diamond accepts two or more compatible
-Map Faces objects positioned in their closed assembly pose. It derives a shared
+`PAT-REQ-086` **Implemented** — Blender patterns accept two or more compatible
+Map Faces objects positioned in their closed assembly pose. The shared bridge derives a
 logical phase from their closest compatible native exterior boundaries, then
-clips each component against only its own carrier. A Diamond facet crossing the
+clips each component against only its own carrier. A pattern feature crossing the
 visual join is represented by independently closed fragments with the same
-lattice phase, height and facet plane. The command must not fuse moving source
+lattice phase. The command must not fuse moving source
 bodies or create relief across their clearance; Blender receives one CAD object
 per distinct source body. Multiple maps from the same body share that one CAD
 object while retaining separately clipped Diamond relief patches. Alignment is topology- and
@@ -29,7 +29,7 @@ two charts into opposite logical half-planes; it does not resize, squeeze, or
 otherwise refit any Diamond cell.
 Existing single-map behavior is unchanged.
 
-`PAT-REQ-087` **In validation** — A selected Map Faces object may contain
+`PAT-REQ-087` **Implemented** — A selected Map Faces object may contain
 faces owned by more than one source Body. Before a Blender pattern job is
 created, the bridge must partition that payload by source Body, remapping only
 face-local identifiers in the transient job copies. It must then apply the same
@@ -39,17 +39,18 @@ assembly, whether the user created one Map Faces object containing all faces or
 created maps separately. The original map payload, source placements, and map
 contract remain unchanged.
 
-`PAT-REQ-089` **In validation** — Independently mapped partial bodies can
+`PAT-REQ-089` **Implemented** — Independently mapped partial bodies can
 jointly form a closed wrap. After rigid registration, coincident physical rim
-samples whose logical positions differ identify the assembly cycle. Fit one
-common module side to that complete cycle using the user's per-module closure
-tolerance. Preserve the requested row height and relief height. Never wrap a
-partial component's coordinates or synthesize relief outside its own carrier.
+samples whose logical positions differ identify the assembly cycle. The shared
+bridge exposes that period without choosing a module size. Each pattern fits its
+own module width to the complete cycle using the user's current size and
+per-module closure tolerance. Never wrap a partial component's coordinates or
+synthesize relief outside its own carrier.
 Validate both physical joins, including the join outside the registration tree,
 with the actual split-body document and a closed-wrap regression. An open chain
 must retain its requested spacing; incompatible cycles must report an error.
 
-`PAT-REQ-088` **In validation** — A Blender Diamond job containing more
+`PAT-REQ-088` **Implemented** — A Blender Diamond job containing more
 than one aligned map must use one shared Diamond lattice: module side, row
 height, and logical origin are derived once from the first selected map and
 applied unchanged to every component. A periodic closure fit may remain active
