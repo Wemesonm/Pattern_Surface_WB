@@ -103,6 +103,7 @@ def dimensions(payload, params):
             "row_height": row_height, "origin": origin, "modules": modules,
             "resolution": resolution, "finish_offset": finish_offset,
             "contact": contact, "blend": blend, "edge_mode": edge_mode,
+            "include_inner_edges": bool(params.get("blend_inner_edges", False)),
             "shared_phase": bool(shared)}
 
 
@@ -384,7 +385,8 @@ def _build_regular_sampled(payload, dim):
     vertices, faces, facet_ids = [], [], []
     backing, mapped_cache = [], {}
     raw_cache = {}
-    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"])
+    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"],
+                                       dim["include_inner_edges"])
                 if dim["blend"] else None)
 
     # The map carrier is a dense sampling mesh, not the pattern topology.
@@ -594,7 +596,8 @@ def build(payload, params):
     backing, mapped_cache = [], {}
     logical_vertices = []
     raw_cache = {}
-    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"])
+    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"],
+                                       dim["include_inner_edges"])
                 if dim["blend"] else None)
 
     # The map carrier is a dense sampling mesh, not the pattern topology.

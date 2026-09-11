@@ -32,6 +32,7 @@ CELL_GAP_Y_KEY = "LastCellGapY"
 BLENDER_BASE_BLEND_KEY = "BlenderBaseBlend"
 BLENDER_EDGE_MODE_KEY = "BlenderEdgeMode"
 BLENDER_ALL_EDGES_KEY = "BlenderBlendAllEdges"
+BLENDER_INNER_EDGES_KEY = "BlenderBlendInnerEdges"
 BLENDER_RESOLUTION_KEY = "BlenderResolution"
 
 
@@ -176,7 +177,7 @@ def get_parameters(map_object=None, blender=False):
     layout.addRow("Closure fit tolerance:", closure_tolerance)
 
     edge_blend = resolution = None
-    lower_edge = upper_edge = None
+    lower_edge = upper_edge = inner_edges = None
     if blender:
         resolution = QtWidgets.QSpinBox(dialog)
         resolution.setRange(1, 40)
@@ -191,6 +192,7 @@ def get_parameters(map_object=None, blender=False):
         mode = preferences().GetString(BLENDER_EDGE_MODE_KEY, "lower")
         lower_edge = QtWidgets.QCheckBox("Bottom edge", dialog)
         upper_edge = QtWidgets.QCheckBox("Top edge", dialog)
+        inner_edges = QtWidgets.QCheckBox("Internal contours (openings)", dialog)
         if mode == "none":
             pass
         elif mode == "upper":
@@ -205,6 +207,8 @@ def get_parameters(map_object=None, blender=False):
         choices_layout.setContentsMargins(0, 0, 0, 0)
         choices_layout.addWidget(lower_edge)
         choices_layout.addWidget(upper_edge)
+        choices_layout.addWidget(inner_edges)
+        inner_edges.setChecked(preferences().GetBool(BLENDER_INNER_EDGES_KEY, False))
         layout.addRow("Concave transition edge:", choices)
         layout.addRow(QtWidgets.QLabel(
             "Mark one or both edges in the map's local orientation. Leave both unchecked for no concave transition."))
@@ -228,9 +232,10 @@ def get_parameters(map_object=None, blender=False):
     }
     if blender:
         values.update({
-            "base_blend": (float(edge_blend.value())
-                           if lower_edge.isChecked() or upper_edge.isChecked() else 0.0),
+            "base_blend": (float(edge_blend.value()) if (lower_edge.isChecked() or
+                           upper_edge.isChecked() or inner_edges.isChecked()) else 0.0),
             "blend_all_edges": False,
+            "blend_inner_edges": inner_edges.isChecked(),
             "edge_transition": ("both" if lower_edge.isChecked() and upper_edge.isChecked() else
                                 "upper" if upper_edge.isChecked() else
                                 "lower" if lower_edge.isChecked() else "none"),
@@ -238,6 +243,7 @@ def get_parameters(map_object=None, blender=False):
         })
         preferences().SetFloat(BLENDER_BASE_BLEND_KEY, values["base_blend"])
         preferences().SetString(BLENDER_EDGE_MODE_KEY, values["edge_transition"])
+        preferences().SetBool(BLENDER_INNER_EDGES_KEY, values["blend_inner_edges"])
         preferences().SetFloat(BLENDER_RESOLUTION_KEY, values["resolution"])
     return values
 

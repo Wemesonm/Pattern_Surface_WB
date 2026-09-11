@@ -117,6 +117,24 @@ class BlenderRibsTests(unittest.TestCase):
         self.assertAlmostEqual(3, distance.distance((11, 20, 35), 0))
         self.assertAlmostEqual(0, distance.distance((10, 20, 35), 2))
 
+    def test_internal_opening_transition_does_not_select_external_vertical_rims(self):
+        # PAT-REQ-090: a selected opening is a complete closed contour.  It
+        # must be independently selectable without accidentally rounding a
+        # vertical external rim merely because both have inward_y near zero.
+        ribs = _module()
+        payload = {"native_boundary_curves": {"curves": [
+            {"points": [[0, 0, 0], [0, 10, 0]], "inward_y": [0],
+             "loop_role": "outer"},
+            {"points": [[10, 0, 0], [10, 10, 0]], "inward_y": [0],
+             "loop_role": "inner"},
+        ]}}
+        exterior_only = ribs.BoundaryDistance(payload, 2, "lower")
+        opening = ribs.BoundaryDistance(payload, 2, "lower", include_inner=True)
+        all_rims = ribs.BoundaryDistance(payload, 2, "all")
+        self.assertAlmostEqual(2, exterior_only.distance((10, 5, 0)))
+        self.assertAlmostEqual(0, opening.distance((10, 5, 0)))
+        self.assertAlmostEqual(0, all_rims.distance((0, 5, 0)))
+
     def test_rectangular_domain_is_closed_and_has_variable_relief(self):
         ribs = _module()
 
@@ -154,6 +172,36 @@ class BlenderRibsTests(unittest.TestCase):
         # visually matching but open seam.
         self.assertTrue(result["weld_relief"])
         self.assertEqual("diagonal_ribs_heightfield", result["stats"]["algorithm"])
+
+    def test_closed_assembly_period_fits_phase_without_wrapping_partial_carrier(self):
+        # PAT-REQ-089: a second physical assembly join closes the complete
+        # wrap even when each selected map is an open strip on its own.  The
+        # partial map itself must remain in its own logical interval.
+        ribs = _module()
+        def vertex(x, y):
+            return {"q": [x, y], "p": [x, y, 0], "n": [0, 0, 1]}
+        a, b, c, d = vertex(-48, 0), vertex(0, 0), vertex(-48, 12), vertex(0, 12)
+        result = ribs.build({
+            "bounds": [-48, 0, 0, 12],
+            "carrier_triangles": [{"v": [a, b, c]}, {"v": [b, d, c]}],
+            "shared_map_phase": {"origin": [3.5, 0.0], "assembly_period": 96.0},
+        }, {"rib_pitch": 4, "rib_height": 1.5, "rib_angle": 45, "resolution": 6})
+        self.assertGreater(result["stats"]["outer_faces"], 0)
+
+    def test_shared_assembly_phase_is_a_neutral_bridge_primitive(self):
+        ribs = _module()
+        origin, period = ribs._shared_assembly_phase({
+            "shared_map_phase": {"origin": [3.5, -8.25], "assembly_period": 96.0},
+        })
+        self.assertEqual((3.5, -8.25), origin)
+        self.assertEqual(96.0, period)
+
+    def test_shared_phase_preserves_both_logical_origin_coordinates(self):
+        # PAT-REQ-086/089: diagonal phase depends on x and y, so a shared
+        # assembly must not inherit each component's independent lower row.
+        source = (Path(__file__).parents[1] / "pattern_surface" / "blender_bridge" /
+                  "geometry_ribs.py").read_text(encoding="utf-8")
+        self.assertIn("origin = (shared_origin if shared_origin is not None", source)
 
     def test_blender_patterns_are_a_single_command_group(self):
         source = (Path(__file__).parents[1] / "pattern_surface" / "commands" /
@@ -197,6 +245,7 @@ class BlenderRibsTests(unittest.TestCase):
         for source in (ribs, diamond):
             self.assertIn('"Bottom edge"', source)
             self.assertIn('"Top edge"', source)
+            self.assertIn('"Internal contours (openings)"', source)
             self.assertIn('"edge_transition"', source)
         self.assertIn('QtWidgets.QCheckBox("Bottom edge"', diamond)
         self.assertIn('QtWidgets.QCheckBox("Top edge"', diamond)

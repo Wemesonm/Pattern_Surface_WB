@@ -79,6 +79,35 @@ def _clip(polygon, triangle):
     return result
 
 
+def shared_assembly_phase(payload):
+    """Read the pattern-neutral logical phase supplied by the Blender job.
+
+    The bridge owns assembly registration and detects a complete physical
+    cycle.  Patterns receive only its logical origin and optional perimeter;
+    each pattern remains responsible for fitting that perimeter to its own
+    repeat geometry.  Invalid or absent transient metadata is treated as an
+    ordinary single-map job.
+    """
+    phase = payload.get("shared_map_phase", {}) or {}
+    raw_origin = phase.get("origin")
+    origin = None
+    if isinstance(raw_origin, (list, tuple)) and len(raw_origin) >= 2:
+        try:
+            candidate = float(raw_origin[0]), float(raw_origin[1])
+            if all(math.isfinite(value) for value in candidate):
+                origin = candidate
+        except (TypeError, ValueError):
+            pass
+    period = None
+    try:
+        candidate = float(phase.get("assembly_period"))
+        if math.isfinite(candidate) and candidate > 0.0:
+            period = candidate
+    except (TypeError, ValueError):
+        pass
+    return origin, period
+
+
 class NativeBoundaryDistance:
     """Distance to selected native CAD rims in map-local orientation.
 
@@ -87,7 +116,7 @@ class NativeBoundaryDistance:
     mapped surface, including rotated and curved bodies.
     """
 
-    def __init__(self, payload, width, edge_mode="all"):
+    def __init__(self, payload, width, edge_mode="all", include_inner=False):
         data = payload.get("native_boundary_curves")
         if data is None:
             raise ValueError("Native CAD boundaries are missing. Generate a new Blender job from FreeCAD.")
@@ -98,14 +127,24 @@ class NativeBoundaryDistance:
         self.width = width
         self.buckets = {}
         for curve in data["curves"]:
+            # Old Blender jobs did not retain loop topology.  Treat them as
+            # external rims so an old job cannot unexpectedly round a hole.
+            is_inner = curve.get("loop_role") == "inner"
+            if is_inner and edge_mode != "all" and not include_inner:
+                continue
             for index, (a, b) in enumerate(zip(curve["points"], curve["points"][1:])):
                 inward = curve["inward_y"][index]
-                if edge_mode == "lower" and inward <= 0.1:
+                if is_inner and not include_inner:
                     continue
-                if edge_mode == "upper" and inward >= -0.1:
-                    continue
-                if edge_mode == "both" and -0.1 <= inward <= 0.1:
-                    continue
+                if not is_inner:
+                    if edge_mode == "lower" and inward <= 0.1:
+                        continue
+                    if edge_mode == "upper" and inward >= -0.1:
+                        continue
+                    if edge_mode == "both" and -0.1 <= inward <= 0.1:
+                        continue
+                # An enabled opening is one selectable contour; its full loop
+                # is intentionally rounded, including vertical portions.
                 component = curve.get("component", 0)
                 ranges = [range(math.floor((min(a[i], b[i]) - width) / width),
                                 math.floor((max(a[i], b[i]) + width) / width) + 1)

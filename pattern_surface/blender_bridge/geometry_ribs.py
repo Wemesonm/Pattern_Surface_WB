@@ -25,6 +25,7 @@ _scale = _HELPERS._scale
 _sub = _HELPERS._sub
 BoundaryDistance = _HELPERS.NativeBoundaryDistance
 _concave_relief = _HELPERS.concave_relief
+_shared_assembly_phase = _HELPERS.shared_assembly_phase
 
 
 def dimensions(payload, params):
@@ -47,33 +48,23 @@ def dimensions(payload, params):
     edge_mode = "all" if params.get("blend_all_edges", False) else params.get("edge_transition", "lower")
     return {"pitch": pitch, "height": height, "angle": math.radians(angle),
             "resolution": resolution, "finish_offset": finish_offset,
-            "contact": contact, "blend": blend, "edge_mode": edge_mode}
+            "contact": contact, "blend": blend, "edge_mode": edge_mode,
+            "include_inner_edges": bool(params.get("blend_inner_edges", False))}
 
 
 def _period(payload):
-    shared_map_phase = payload.get("shared_map_phase", {}) or {}
-    shared_period = shared_map_phase.get("assembly_period")
     adjustments = payload.get("periodic_adjustments", []) or []
-    if any(int(record.get("axis", -1)) == 0 for record in adjustments):
-        if shared_period is not None and float(shared_period) > 0.0:
-            try:
-                return float(shared_period), float(shared_map_phase.get("origin", [0.0, 0.0])[0])
-            except (TypeError, ValueError):
-                pass
+    # This is a carrier-local periodic seam.  A shared assembly period is
+    # deliberately excluded here: each partial map must remain clipped to its
+    # own logical interval (PAT-REQ-089), rather than being wrapped into the
+    # reference map's interval.
     if len(adjustments) == 1 and int(adjustments[0].get("axis", -1)) == 0:
         return float(adjustments[0]["period"]), float(adjustments[0].get("lower", 0.0))
     return None, None
 
 
 def _shared_map_origin(payload):
-    shared_map_phase = payload.get("shared_map_phase", {}) or {}
-    origin = shared_map_phase.get("origin")
-    if not (isinstance(origin, (list, tuple)) and len(origin) >= 2):
-        return None
-    try:
-        return float(origin[0]), float(origin[1])
-    except (TypeError, ValueError):
-        return None
+    return _shared_assembly_phase(payload)[0]
 
 
 def _stitch_surface(faces, facet_ids, logical_vertices, add_vertex, period, step):
@@ -146,14 +137,23 @@ def build(payload, params):
     min_x, max_x, min_y, max_y = (float(value) for value in bounds)
     period, period_origin = _period(payload)
     shared_origin = _shared_map_origin(payload)
-    origin_x = shared_origin[0] if shared_origin is not None else (period_origin if period is not None else min_x)
-    origin = (origin_x, min_y)
+    _, assembly_period = _shared_assembly_phase(payload)
+    # Shared maps are already registered in one logical atlas.  A diagonal
+    # rib phase depends on both coordinates, unlike an axial-only pattern, so
+    # retain both parts of the common origin.  Independent maps keep their
+    # existing lower-row origin.
+    origin = (shared_origin if shared_origin is not None else
+              (period_origin if period is not None else min_x, min_y))
     cosine, sine = math.cos(dim["angle"]), math.sin(dim["angle"])
     # A periodic wall must start and finish on the same rib phase.  The nearest
     # whole number of waves is fitted only in the periodic logical direction.
     x_frequency = cosine / dim["pitch"]
-    if period is not None:
-        x_frequency = round(period * x_frequency) / period
+    phase_period = assembly_period if assembly_period is not None else period
+    if phase_period is not None:
+        # A closed assembly can be built from individually open map carriers.
+        # Fit the wave to the complete circuit, but never use that circuit to
+        # wrap or duplicate a partial carrier below.
+        x_frequency = round(phase_period * x_frequency) / phase_period
 
     def phase(point):
         return ((point[0] - origin[0]) * x_frequency +
@@ -184,7 +184,9 @@ def build(payload, params):
     if dim["blend"] and math.ceil((max_x-min_x)/step_x)*math.ceil((max_y-min_y)/step_y) > 1500000:
         raise ValueError("Requested ribs exceed the sampling limit. Increase spacing or transition width, or reduce resolution.")
     # Reject excessive resolution before allocating the physical boundary index.
-    boundary = BoundaryDistance(payload, dim["blend"], dim["edge_mode"]) if dim["blend"] else None
+    boundary = (BoundaryDistance(payload, dim["blend"], dim["edge_mode"],
+                                 dim["include_inner_edges"])
+                if dim["blend"] else None)
     buckets = {}
     for index, item in enumerate(domains):
         points = [vertex["q"] for vertex in item.get("v", [])]
