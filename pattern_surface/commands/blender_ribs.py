@@ -30,8 +30,16 @@ class BlenderDiagonalRibsCommand:
             App.Console.PrintError("Diagonal Ribs requires a Mapped Surface or Mapping Grid selection.\n")
             return
         try:
-            mapped = resolve_map(selected[0])
-            if mapped is None:
+            mapped = []
+            seen = set()
+            for item in selected:
+                current = resolve_map(item)
+                if current is None:
+                    raise ValueError("Select a Mapped Surface or Mapping Grid first.")
+                if current.Name not in seen:
+                    seen.add(current.Name)
+                    mapped.append(current)
+            if not mapped:
                 raise ValueError("Select a Mapped Surface or Mapping Grid first.")
             values = parameters.get_parameters(mapped)
             if values is None:
