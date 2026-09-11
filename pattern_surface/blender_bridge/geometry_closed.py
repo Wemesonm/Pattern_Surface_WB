@@ -235,6 +235,7 @@ def _build_planar(strips, dim, bounds):
     edges = Counter(tuple(sorted(e)) for f in faces for e in zip(f, f[1:]+f[:1]))
     return {"vertices": vertices, "faces": faces, "facet_ids": facet_ids,
             "dimensions": dim, "axis": None, "planar_patches": patches,
+            "clip_support_planes": False,
             "stats": {"algorithm": "rigid_planar_clip", "faces": len(faces),
                       "vertices": len(vertices), "planar_patches": len(patches),
                       "max_facet_plane_error_mm": max(metrics, default=0),
@@ -456,6 +457,7 @@ def _build_regular_sampled(payload, dim):
     return {"vertices": vertices, "faces": faces,
             "facet_ids": facet_ids + [0] * (len(faces) - len(facet_ids)),
             "dimensions": dim, "axis": axis,
+            "clip_support_planes": False,
             "stats": {"algorithm": "regular_sampled_facets", "outer_faces": len(outer_faces), "faces": len(faces),
                       "vertices": len(vertices), "facets": facet,
                       "bad_edges_before_weld": bad}}
@@ -801,6 +803,11 @@ def build(payload, params):
     return {"vertices": vertices, "faces": faces,
             "facet_ids": facet_ids + [0] * (len(faces) - len(facet_ids)),
             "dimensions": dim, "axis": axis,
+            # PAT-REQ-085: the carrier already clips every partial facet to
+            # the exact selected CAD domain. A secondary adjacent-face plane
+            # Boolean only approximates a curved/trimmed rim and can deform
+            # the last full-height Diamond cells.
+            "clip_support_planes": False,
             "stats": {"outer_faces": len(outer_faces), "faces": len(faces),
                       "vertices": len(vertices), "facets": facet,
                       "refinement_rounds": refinement_rounds,

@@ -1,5 +1,17 @@
 # Pattern Tools Specification
 
+`PAT-REQ-085` **Implemented** — A Blender Diamond map may cover only part of
+the source body. Every external partial Diamond must retain its original
+pyramid facet plane and requested relief height until it intersects the exact
+physical carrier of the selected faces; only the outside portion is removed.
+Do not apply a second Boolean from adjacent-face support planes after this
+carrier clipping: a plane only approximates a curved or trimmed native rim and
+can create serrated strips or deform the final Diamond cells. This rule uses
+the public carrier contract and applies to arbitrary partial face selections,
+not a named body, face count or screen direction. Validate a partial selection
+with an open lateral boundary, a closed relief shell and untouched full-height
+interior cells.
+
 `PAT-REQ-084` **Implemented** — Blender relief patterns that offer the
 concave native-rim transition shall let the user independently select the lower
 and upper map rims. Selecting both applies the transition to both rims;

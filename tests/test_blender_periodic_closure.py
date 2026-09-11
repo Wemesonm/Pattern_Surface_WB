@@ -214,7 +214,8 @@ class PeriodicClosureTest(unittest.TestCase):
         self.assertEqual(0, data["stats"]["bad_edges_before_weld"])
 
     def test_partial_boundary_leaves_no_unreferenced_vertices(self):
-        # PAT-REQ-065: rejected samples must not become loose components.
+        # PAT-REQ-065/085: rejected samples must not become loose components,
+        # and their exact carrier clip must remain the only Diamond rim cut.
         def v(x, y):
             return {"q": [x, y], "p": [x, y, 0], "n": [0, 0, 1]}
         data = geometry.build({
@@ -225,6 +226,7 @@ class PeriodicClosureTest(unittest.TestCase):
         self.assertEqual(set(range(len(data["vertices"]))),
                          {i for face in data["faces"] for i in face})
         self.assertEqual(0, data["stats"]["bad_edges_before_weld"])
+        self.assertFalse(data["clip_support_planes"])
 
     def test_planar_tapered_wrap_closes_with_roundoff_origin(self):
         # PAT-REQ-060/062: a tapered atlas, including its periodic sharp corner.
