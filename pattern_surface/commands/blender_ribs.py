@@ -40,7 +40,11 @@ class BlenderDiagonalRibsCommand:
             module = Path(__file__).parents[1] / "blender_bridge" / "geometry_ribs.py"
             job_path = create_job(mapped, values, geometry_module=module,
                                   pattern_label="Diagonal Ribs",
-                                  boundary_solver="MANIFOLD",
+                                  # PAT-REQ-080 / DATA-REQ-053: only the Exact
+                                  # solver preserves every native CAD boundary
+                                  # without retaining an overlapping cap that
+                                  # the Manifold solver can report as closed.
+                                  boundary_solver="EXACT",
                                   include_boundary_curves=values.get("base_blend", 0) > 0)
             subprocess.Popen([_blender_binary(), "--factory-startup", "--python",
                               str(worker_path()), "--", str(job_path), "--interactive"])

@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 _SPEC = importlib.util.spec_from_file_location(
-    "auzyron_diamond_geometry_helpers", Path(__file__).with_name("geometry_closed.py"))
+    "auzyron_geometry_common", Path(__file__).with_name("geometry_common.py"))
 _HELPERS = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_HELPERS)
 EPS = _HELPERS.EPS
@@ -357,6 +357,10 @@ def build(payload, params):
             "facet_ids": facet_ids + [0] * (len(faces)-len(facet_ids)),
             "smooth_relief": True,
             "weld_relief": True,
+            # PAT-REQ-083: this height field is already clipped to the carrier
+            # and tapered from every native curve.  A second planar Boolean
+            # slices curved/filleted rims into overlapping strips.
+            "clip_support_planes": False,
             "cleanup_after_clip": False,
             "stats": {"algorithm": "diagonal_ribs_heightfield", "outer_faces": len(outer_faces),
                       "faces": len(faces), "vertices": len(vertices), "facets": facet,

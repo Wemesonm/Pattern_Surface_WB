@@ -71,6 +71,9 @@ class BlenderRibsTests(unittest.TestCase):
         baseline = ribs.build(payload, params)
         self.assertEqual(baseline, ribs.build(payload, dict(params, base_blend=0)))
         result = ribs.build(payload, dict(params, base_blend=3, blend_all_edges=True))
+        # PAT-REQ-083: Ribs owns its carrier/curve termination and must not
+        # receive a second planar Boolean cut at a curved native rim.
+        self.assertFalse(result["clip_support_planes"])
         self.assertEqual(0, result["stats"]["bad_edges_before_weld"])
         for before, after in zip(baseline["vertices"][:len(baseline["vertices"])//2],
                                  result["vertices"][:len(result["vertices"])//2]):
@@ -156,10 +159,21 @@ class BlenderRibsTests(unittest.TestCase):
         command = (Path(__file__).parents[1] / "pattern_surface" / "commands" /
                    "blender_ribs.py").read_text(encoding="utf-8")
         self.assertIn("geometry_ribs.py", command)
-        self.assertIn('boundary_solver="MANIFOLD"', command)
+        # PAT-REQ-080 / DATA-REQ-053: a curved/filleted native rim must use
+        # Exact clipping.  Manifold can leave an apparently closed saw-tooth
+        # cap at a native boundary.
+        self.assertIn('boundary_solver="EXACT"', command)
         job = (Path(__file__).parents[1] / "pattern_surface" / "blender_bridge" /
                "job.py").read_text(encoding="utf-8")
         self.assertIn('boundary_solver="EXACT"', job)
+
+    def test_ribs_do_not_depend_on_diamond_geometry(self):
+        # PAT-REQ-011: a pattern uses Map Faces plus neutral bridge helpers,
+        # never another pattern implementation.
+        ribs = (Path(__file__).parents[1] / "pattern_surface" / "blender_bridge" /
+                "geometry_ribs.py").read_text(encoding="utf-8")
+        self.assertIn('geometry_common.py', ribs)
+        self.assertNotIn('geometry_closed.py', ribs)
 
     def test_blender_worker_removes_factory_scene_objects(self):
         source = (Path(__file__).parents[1] / "pattern_surface" / "blender_bridge" /

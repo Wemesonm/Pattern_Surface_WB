@@ -319,7 +319,7 @@ def main():
                 # weld them before the physical rim cut closes the shell.
                 _weld_mesh(relief)
             supports = job["map_payload"].get("boundary_support_planes", [])
-            if supports:
+            if supports and data.get("clip_support_planes", True):
                 boundary = _import_geometry(Path(__file__).with_name("boundary_clip.py"))
                 boundary.clip_support_planes(
                     relief, supports, str(job.get("boundary_solver", "EXACT")))

@@ -39,6 +39,13 @@ atlas bounds or legacy external segments. Test curved/sloped rims, holes,
 periodic seams, rotations, disabled equivalence and the real saved CAD model.
 Acceptance evidence and limitations: [native edge transition review](../ribs-edge-transition-2026-09-10.md).
 
+`PAT-REQ-083` **Implemented** — The continuous Diagonal Ribs height field clips
+its samples to the physical carrier and terminates relief from every native CAD
+boundary curve. It must not receive a second support-plane Boolean cut after
+the shell is closed: a plane is only an approximation of a curved or filleted
+rim and can split the shell into overlapping strips. This rule is pattern-local;
+other Blender patterns may use their own physical boundary strategy.
+
 ## Boundary correction validation — 2026-09-10
 
 The bridge now refreshes native trimmed curved carrier domains and cuts displaced
