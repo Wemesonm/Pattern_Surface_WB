@@ -136,6 +136,14 @@ already owns the map object. These associations organize the document tree and
 identify ownership for consumers without altering the serialized payload or the
 source Body's Part Design history.
 
+`DATA-REQ-057` **Implemented** — A transient Blender shared-phase job may
+contain independently serialized Map Faces payloads. Before Blender generation,
+the bridge may apply a rigid logical 2D signed-axis transform and translation to
+each non-reference payload so compatible native exterior boundaries share one
+lattice phase. This transformation is job-local: it does not rewrite
+`MapPayloadChunks`, alter source placements, or change any stored map grid.
+Each component retains its own carrier, source-body export and physical clipping.
+
 ## Pattern Object and Payload
 
 Generic properties:

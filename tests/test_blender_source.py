@@ -107,5 +107,16 @@ class BlenderSourceTests(unittest.TestCase):
     def test_blender_command_uses_the_diamond_dialog_without_requiring_a_result(self):
         from pattern_surface.commands import blender_diamond as command
         source = Path(command.__file__).read_text(encoding='utf-8')
-        self.assertIn('diamond_parameters.get_parameters(mapped, blender=True)', source)
+        self.assertIn('diamond_parameters.get_parameters(mapped[0], blender=True)', source)
         self.assertIn('include_boundary_curves=parameters.get("base_blend", 0.0) > 0.0', source)
+
+    def test_shared_phase_jobs_keep_independent_component_exports(self):
+        source = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/job.py').read_text(encoding='utf-8')
+        worker = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/worker.py').read_text(encoding='utf-8')
+        self.assertIn('job["components"] = components', source)
+        self.assertIn('"shared_phase"', source)
+        self.assertIn('components_by_sources', source)
+        self.assertIn('"maps": [{key: value', source)
+        self.assertIn('Auzyron Shared Pattern Assembly', worker)
+        self.assertIn('Auzyron CAD Body — {}', worker)
+        self.assertIn('"patterns": patterns', worker)

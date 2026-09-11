@@ -32,17 +32,25 @@ class BlenderDiamondCommand:
         selected = Gui.Selection.getSelection()
         if not selected:
             App.Console.PrintError(
-                "Blender: Diamond requires a Mapped Surface or Mapping Grid selection.\n"
+                "Blender: Diamond requires one or more Mapped Surface or Mapping Grid selections.\n"
             )
             return
         try:
-            mapped = resolve_map(selected[0])
-            if mapped is None:
+            mapped = []
+            seen = set()
+            for item in selected:
+                resolved = resolve_map(item)
+                if resolved is None:
+                    raise ValueError("Select only Mapped Surfaces or Mapping Grids.")
+                if resolved.Name not in seen:
+                    seen.add(resolved.Name)
+                    mapped.append(resolved)
+            if not mapped:
                 raise ValueError("Select a Mapped Surface or Mapping Grid first.")
             # Blender is the Diamond generator in this workflow.  Map Faces
             # only supplies the CAD surface and logical coordinates; it does
             # not require a Diamond result to exist in FreeCAD.
-            values = diamond_parameters.get_parameters(mapped, blender=True)
+            values = diamond_parameters.get_parameters(mapped[0], blender=True)
             if values is None:
                 return
             parameters = {

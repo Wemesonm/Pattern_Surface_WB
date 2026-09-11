@@ -155,18 +155,25 @@ def worker_path():
     return Path(__file__).with_name("worker.py")
 
 
-def create_job(map_object, parameters, root=None, pattern_object=None,
-               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT",
-               include_boundary_curves=False):
-    """Export the source body and map data into a transient Blender job."""
-
-    map_object = resolve_map(map_object)
-    if map_object is None:
+def _map_objects(selection):
+    """Resolve a selection into unique Map Faces runs in selection order."""
+    objects = selection if isinstance(selection, (list, tuple)) else [selection]
+    result = []
+    seen = set()
+    for selected in objects:
+        mapped = resolve_map(selected)
+        if mapped is None:
+            raise ValueError("Select only Mapped Surfaces or Mapping Grids.")
+        key = getattr(mapped, "Name", id(mapped))
+        if key not in seen:
+            seen.add(key)
+            result.append(mapped)
+    if not result:
         raise ValueError("Select a Mapped Surface or Mapping Grid first.")
-    document = map_object.Document
-    payload = _payload(map_object)
-    from .reference import prepare_reference
-    payload = prepare_reference(document, payload, include_boundary_curves=include_boundary_curves)
+    return result
+
+
+def _sources_for_map(document, payload):
     records = payload.get("faces", [])
     objects = []
     seen = set()
@@ -175,34 +182,87 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
         source = document.getObject(object_name) if object_name else None
         if source is None:
             raise ValueError("Map source object is missing: {}. Recreate Map Faces from the current document.".format(object_name))
-        if source is not None:
-            source = _solid_owner(source)
-            if source.Name not in seen:
-                seen.add(source.Name)
-                objects.append(source)
+        source = _solid_owner(source)
+        if source.Name not in seen:
+            seen.add(source.Name)
+            objects.append(source)
     if not objects:
         raise ValueError("The map does not reference a source CAD body.")
+    return objects
+
+
+def create_job(map_object, parameters, root=None, pattern_object=None,
+               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT",
+               include_boundary_curves=False):
+    """Export the source body and map data into a transient Blender job."""
+
+    map_objects = _map_objects(map_object)
+    document = map_objects[0].Document
+    if any(item.Document is not document for item in map_objects):
+        raise ValueError("All selected maps must belong to the active FreeCAD document.")
+    from .reference import prepare_reference
+    payloads = [prepare_reference(document, _payload(item),
+                                  include_boundary_curves=include_boundary_curves)
+                for item in map_objects]
 
     root = job_root(root)
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="auzyron-", dir=str(root)))
-    body_path = directory / "source_body.stl"
-    body_topology = _export_clean_shape(document, objects, body_path)
+    maps = []
+    for mapped, payload in zip(map_objects, payloads):
+        sources = _sources_for_map(document, payload)
+        maps.append({
+            "map_object": mapped.Name,
+            "map_label": getattr(mapped, "Label", mapped.Name),
+            "map_payload": payload,
+            "sources": sources,
+        })
+    phase_records = []
+    if len(maps) > 1:
+        from .shared_phase import align
+        aligned, phase_records = align([item["map_payload"] for item in maps])
+        for mapped, payload in zip(maps, aligned):
+            mapped["map_payload"] = payload
+    # Several maps can refer to separate exterior regions of one Body. Export
+    # that Body once; only a different source-body set creates another Blender
+    # CAD object.  Pattern patches remain independently clipped to their maps.
+    components_by_sources = {}
+    for mapped in maps:
+        key = tuple(source.Name for source in mapped["sources"])
+        components_by_sources.setdefault(key, []).append(mapped)
+    components = []
+    for index, (key, component_maps) in enumerate(components_by_sources.items(), 1):
+        sources = component_maps[0]["sources"]
+        body_path = directory / "source_body_{:03d}.stl".format(index)
+        components.append({
+            "body_label": getattr(sources[0], "Label", sources[0].Name),
+            "body_mesh": str(body_path),
+            "body_topology": _export_clean_shape(document, sources, body_path),
+            "source_bodies": list(key),
+            "maps": [{key: value for key, value in mapped.items() if key != "sources"}
+                     for mapped in component_maps],
+        })
+    first_map = maps[0]
+    first_component = components[0]
     job = {
         "format": JOB_SCHEMA,
         "version": JOB_VERSION,
         "units": "mm",
-        "source": {"document": document.Name, "map_object": map_object.Name,
-                   "map_label": getattr(map_object, "Label", map_object.Name)},
-        "map_payload": payload,
-        "body_mesh": str(body_path),
-        "body_topology": body_topology,
+        "source": {"document": document.Name, "map_object": first_map["map_object"],
+                   "map_label": first_map["map_label"]},
+        "map_payload": first_map["map_payload"],
+        "body_mesh": first_component["body_mesh"],
+        "body_topology": first_component["body_topology"],
         "parameters": dict(parameters),
         "geometry_module": str(geometry_module or Path(__file__).with_name("geometry_closed.py")),
         "pattern_label": str(pattern_label),
         "boundary_solver": str(boundary_solver),
         "output_dir": str(directory),
     }
+    if len(maps) > 1:
+        job["components"] = components
+        job["shared_phase"] = {"reference_map": first_map["map_object"],
+                               "alignments": phase_records}
     # An optional final pattern is supported for future export-only workflows,
     # but Blender Diamond intentionally generates its relief from the map.
     if pattern_object is not None:

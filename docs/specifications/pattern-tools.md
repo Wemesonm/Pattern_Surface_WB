@@ -12,6 +12,18 @@ not a named body, face count or screen direction. Validate a partial selection
 with an open lateral boundary, a closed relief shell and untouched full-height
 interior cells.
 
+`PAT-REQ-086` **Implemented** — Blender Diamond accepts two or more compatible
+Map Faces objects positioned in their closed assembly pose. It derives a shared
+logical phase from their closest compatible native exterior boundaries, then
+clips each component against only its own carrier. A Diamond facet crossing the
+visual join is represented by independently closed fragments with the same
+lattice phase, height and facet plane. The command must not fuse moving source
+bodies or create relief across their clearance; Blender receives one CAD object
+per distinct source body. Multiple maps from the same body share that one CAD
+object while retaining separately clipped Diamond relief patches. Alignment is topology- and
+geometry-based, never a body name, face number or world-axis special case.
+Existing single-map behavior is unchanged.
+
 `PAT-REQ-084` **Implemented** — Blender relief patterns that offer the
 concave native-rim transition shall let the user independently select the lower
 and upper map rims. Selecting both applies the transition to both rims;
