@@ -51,10 +51,29 @@ def dimensions(payload, params):
 
 
 def _period(payload):
+    shared_map_phase = payload.get("shared_map_phase", {}) or {}
+    shared_period = shared_map_phase.get("assembly_period")
+    if shared_period is not None and float(shared_period) > 0.0:
+        try:
+            return float(shared_period), float(shared_map_phase.get("origin", [0.0, 0.0])[0])
+        except (TypeError, ValueError):
+            pass
+
     adjustments = payload.get("periodic_adjustments", []) or []
     if len(adjustments) == 1 and int(adjustments[0].get("axis", -1)) == 0:
         return float(adjustments[0]["period"]), float(adjustments[0].get("lower", 0.0))
     return None, None
+
+
+def _shared_map_origin(payload):
+    shared_map_phase = payload.get("shared_map_phase", {}) or {}
+    origin = shared_map_phase.get("origin")
+    if not (isinstance(origin, (list, tuple)) and len(origin) >= 2):
+        return None
+    try:
+        return float(origin[0]), float(origin[1])
+    except (TypeError, ValueError):
+        return None
 
 
 def _stitch_surface(faces, facet_ids, logical_vertices, add_vertex, period, step):
@@ -126,7 +145,9 @@ def build(payload, params):
         raise ValueError("The map has no valid physical carrier.")
     min_x, max_x, min_y, max_y = (float(value) for value in bounds)
     period, period_origin = _period(payload)
-    origin = (period_origin if period is not None else min_x, min_y)
+    shared_origin = _shared_map_origin(payload)
+    origin_x = shared_origin[0] if shared_origin is not None else (period_origin if period is not None else min_x)
+    origin = (origin_x, min_y)
     cosine, sine = math.cos(dim["angle"]), math.sin(dim["angle"])
     # A periodic wall must start and finish on the same rib phase.  The nearest
     # whole number of waves is fitted only in the periodic logical direction.
