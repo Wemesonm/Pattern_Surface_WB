@@ -1,7 +1,7 @@
 """Native CAD boundary references for transient Blender packages."""
 
 
-def prepare_reference(document, payload):
+def prepare_reference(document, payload, include_boundary_curves=False):
     """Refresh trimmed curved domains without rewriting the saved map."""
     import Part
     from .. import core_engine as core
@@ -19,6 +19,9 @@ def prepare_reference(document, payload):
     result["carrier_triangles"] = triangles
     result["triangles"] = triangles
     result["boundary_support_planes"] = support_planes(entries)
+    if include_boundary_curves:
+        from .native_boundary import boundary_curves
+        result["native_boundary_curves"] = boundary_curves(entries)
     return result
 
 

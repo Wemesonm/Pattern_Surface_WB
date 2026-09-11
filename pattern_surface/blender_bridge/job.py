@@ -156,7 +156,8 @@ def worker_path():
 
 
 def create_job(map_object, parameters, root=None, pattern_object=None,
-               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT"):
+               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT",
+               include_boundary_curves=False):
     """Export the source body and map data into a transient Blender job."""
 
     map_object = resolve_map(map_object)
@@ -165,7 +166,7 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
     document = map_object.Document
     payload = _payload(map_object)
     from .reference import prepare_reference
-    payload = prepare_reference(document, payload)
+    payload = prepare_reference(document, payload, include_boundary_curves=include_boundary_curves)
     records = payload.get("faces", [])
     objects = []
     seen = set()

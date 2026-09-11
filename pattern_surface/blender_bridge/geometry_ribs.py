@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 _SPEC = importlib.util.spec_from_file_location(
-    "auzyron_diamond_geometry_helpers", Path(__file__).with_name("geometry_closed.py"))
+    "auzyron_geometry_common", Path(__file__).with_name("geometry_common.py"))
 _HELPERS = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_HELPERS)
 EPS = _HELPERS.EPS
@@ -32,6 +32,9 @@ def dimensions(payload, params):
     resolution = int(params.get("resolution", 8))
     finish_offset = float(params.get("finish_offset", 0.045))
     contact = float(params.get("contact", 0.25))
+    blend = float(params.get("base_blend", 0.0))
+    if not math.isfinite(blend) or blend < 0:
+        raise ValueError("Edge transition width must be finite and nonnegative.")
     if not all(math.isfinite(value) and value > 0.0
                for value in (pitch, height, finish_offset, contact)):
         raise ValueError("Rib dimensions must be finite and positive.")
@@ -41,7 +44,43 @@ def dimensions(payload, params):
         raise ValueError("Rib resolution must be between 3 and 32.")
     return {"pitch": pitch, "height": height, "angle": math.radians(angle),
             "resolution": resolution, "finish_offset": finish_offset,
-            "contact": contact}
+            "contact": contact, "blend": blend,
+            "all_edges": bool(params.get("blend_all_edges", False))}
+
+
+class BoundaryDistance:
+    """Bounded physical distance queries; no logical bounds or mesh-edge guesses."""
+
+    def __init__(self, payload, width, all_edges):
+        data = payload.get("native_boundary_curves")
+        if data is None:
+            raise ValueError("Native CAD boundaries are missing. Generate a new Ribs job from FreeCAD.")
+        self.width = width
+        self.buckets = {}
+        for curve in data["curves"]:
+            for index, (a, b) in enumerate(zip(curve["points"], curve["points"][1:])):
+                if not all_edges and curve["inward_y"][index] <= 0.1:
+                    continue
+                component = curve.get("component", 0)
+                ranges = [range(math.floor((min(a[i], b[i])-width)/width),
+                                math.floor((max(a[i], b[i])+width)/width)+1) for i in range(3)]
+                delta = tuple(b[i]-a[i] for i in range(3))
+                length2 = sum(v*v for v in delta)
+                if length2 <= 1e-16:
+                    continue
+                segment = (a, delta, length2)
+                for x in ranges[0]:
+                    for y in ranges[1]:
+                        for z in ranges[2]:
+                            self.buckets.setdefault((component, x, y, z), []).append(segment)
+
+    def distance(self, point, component=0):
+        key = (component,) + tuple(math.floor(value/self.width) for value in point)
+        best = self.width*self.width
+        for a, delta, length2 in self.buckets.get(key, ()):
+            ratio = max(0.0, min(1.0, sum((point[i]-a[i])*delta[i] for i in range(3))/length2))
+            best = min(best, sum((point[i]-a[i]-ratio*delta[i])**2 for i in range(3)))
+        return math.sqrt(best)
 
 
 def _period(payload):
@@ -49,6 +88,89 @@ def _period(payload):
     if len(adjustments) == 1 and int(adjustments[0].get("axis", -1)) == 0:
         return float(adjustments[0]["period"]), float(adjustments[0].get("lower", 0.0))
     return None, None
+
+
+def _stitch_surface(faces, facet_ids, logical_vertices, add_vertex, period, step):
+    """Split existing T junctions before closing the backing at open rims."""
+    def unwrap(points):
+        result = [list(p) for p in points]
+        if period is not None:
+            for p in result[1:]:
+                p[0] += round((result[0][0]-p[0])/period)*period
+        return result
+
+    counts = Counter(tuple(sorted(e)) for f in faces for e in zip(f, f[1:]+f[:1]))
+    boundary = [e for e, n in counts.items() if n == 1]
+    nodes = {i for e in boundary for i in e}
+    bins = {}
+    for i in nodes:
+        p = logical_vertices[i]
+        for shift in ((-period, 0, period) if period else (0,)):
+            q = (p[0]+shift, p[1])
+            bins.setdefault((math.floor(q[0]/step), math.floor(q[1]/step)), []).append((i, q))
+    cuts = {}
+    for a, b in boundary:
+        pa, pb = unwrap([logical_vertices[a], logical_vertices[b]])
+        d = (pb[0]-pa[0], pb[1]-pa[1])
+        length = sum(v*v for v in d)
+        if length < 1e-12:
+            continue
+        found = {}
+        for x in range(math.floor(min(pa[0], pb[0])/step)-1, math.floor(max(pa[0], pb[0])/step)+2):
+            for y in range(math.floor(min(pa[1], pb[1])/step)-1, math.floor(max(pa[1], pb[1])/step)+2):
+                for i, q in bins.get((x, y), ()):
+                    if i in (a, b):
+                        continue
+                    t = sum((q[k]-pa[k])*d[k] for k in range(2))/length
+                    if 1e-6 < t < 1-1e-6 and sum((q[k]-pa[k]-t*d[k])**2 for k in range(2)) < 1e-10:
+                        found[i] = t
+        if found:
+            cuts[(a, b)] = [i for i, t in sorted(found.items(), key=lambda x: x[1])]
+    if not cuts:
+        return faces, facet_ids
+    stitched, ids = [], []
+    for face, fid in zip(faces, facet_ids):
+        ring = []
+        for a, b in zip(face, face[1:]+face[:1]):
+            ring.append(a)
+            edge = tuple(sorted((a, b)))
+            extra = cuts.get(edge, [])
+            ring.extend(extra if a == edge[0] else reversed(extra))
+        if len(ring) == 3:
+            stitched.append(face)
+            ids.append(fid)
+        else:
+            points = unwrap([logical_vertices[i] for i in face])
+            center = add_vertex(tuple(sum(p[k] for p in points)/3 for k in range(2)))
+            if center is None:
+                raise ValueError("Cannot join a rib surface boundary sample.")
+            for a, b in zip(ring, ring[1:]+ring[:1]):
+                if len({a, b, center}) == 3:
+                    stitched.append((a, b, center))
+                    ids.append(fid)
+    return stitched, ids
+
+
+def _concave_relief(wave, distance, width, height):
+    """Concave wall-tangent root, smoothly joined to the unchanged rib wave.
+
+    The envelope is shared across the rib section instead of multiplying each
+    height by a fade. A wall-tangent elliptical sag grows into an unbounded
+    envelope; its smooth intersection tends to the original rib with zero
+    first and second derivative error at the end of the transition.
+    """
+    if wave <= 0.0:
+        return 0.0
+    if distance >= width:
+        return wave
+    t = max(0.0, distance / width)
+    sag = t*t / (1.0 + math.sqrt(max(0.0, 1.0-t*t)))
+    envelope = height * sag / ((1.0-t)*(1.0-t))
+    if envelope <= 0.0:
+        return 0.0
+    # Smooth everywhere: unlike a piecewise minimum, no narrow blend band
+    # develops pointed shoulders where a high rib meets the concave root.
+    return wave / math.hypot(1.0, wave/envelope)
 
 
 def build(payload, params):
@@ -88,9 +210,15 @@ def build(payload, params):
     # Spatial buckets keep clipping tied to local carrier triangles instead of
     # scanning the entire CAD tessellation for every rib sample.
     step_y = dim["pitch"] / dim["resolution"]
+    if dim["blend"]:
+        step_y = min(step_y, dim["blend"]/6.0)
     # Make periodic samples land exactly on both sides of the logical seam.
     # A nominal pitch subdivision rarely divides a circumference exactly.
     step_x = step_y if period is None else period / max(1, round(period / step_y))
+    if dim["blend"] and math.ceil((max_x-min_x)/step_x)*math.ceil((max_y-min_y)/step_y) > 1500000:
+        raise ValueError("Requested ribs exceed the sampling limit. Increase spacing or transition width, or reduce resolution.")
+    # Reject excessive resolution before allocating the physical boundary index.
+    boundary = BoundaryDistance(payload, dim["blend"], dim["all_edges"]) if dim["blend"] else None
     buckets = {}
     for index, item in enumerate(domains):
         points = [vertex["q"] for vertex in item.get("v", [])]
@@ -135,6 +263,7 @@ def build(payload, params):
         return best
 
     vertices, backing, faces, facet_ids, vertex_cache = [], [], [], [], {}
+    logical_vertices = []
 
     def add_vertex(point):
         logical = canonical(point)
@@ -146,11 +275,21 @@ def build(payload, params):
         if mapped is None:
             return None
         physical, normal = mapped
-        outer = _add(physical, _scale(normal, relief(logical) + dim["finish_offset"]))
+        amplitude = relief(logical) + dim["finish_offset"]
+        if boundary:
+            # Keep the historical continuous skin above the CAD wall. Tapering
+            # it into the wall exposes patches of the intersecting CAD mesh.
+            # Only the rib wave fades; the backing still penetrates the body
+            # and the physical boundary clip still trims the complete result.
+            amplitude = dim["finish_offset"] + _concave_relief(
+                relief(logical), boundary.distance(physical, source.get("component", 0)),
+                dim["blend"], dim["height"])
+        outer = _add(physical, _scale(normal, amplitude))
         inner = _sub(physical, _scale(normal, dim["contact"]))
         vertex_cache[key] = len(vertices)
         vertices.append(outer)
         backing.append(inner)
+        logical_vertices.append(logical)
         return vertex_cache[key]
 
     col0, col1 = math.floor((min_x-origin[0])/step_x)-1, math.ceil((max_x-origin[0])/step_x)+1
@@ -194,6 +333,9 @@ def build(payload, params):
                 facet += 1
     if not faces:
         raise ValueError("No rib sample intersects the mapped carrier.")
+    if boundary:
+        faces, facet_ids = _stitch_surface(faces, facet_ids, logical_vertices,
+                                           add_vertex, period, max(step_x, step_y))
     used = sorted({index for face in faces for index in face})
     remap = {old: new for new, old in enumerate(used)}
     vertices = [vertices[index] for index in used]
@@ -215,6 +357,10 @@ def build(payload, params):
             "facet_ids": facet_ids + [0] * (len(faces)-len(facet_ids)),
             "smooth_relief": True,
             "weld_relief": True,
+            # PAT-REQ-083: this height field is already clipped to the carrier
+            # and tapered from every native curve.  A second planar Boolean
+            # slices curved/filleted rims into overlapping strips.
+            "clip_support_planes": False,
             "cleanup_after_clip": False,
             "stats": {"algorithm": "diagonal_ribs_heightfield", "outer_faces": len(outer_faces),
                       "faces": len(faces), "vertices": len(vertices), "facets": facet,
