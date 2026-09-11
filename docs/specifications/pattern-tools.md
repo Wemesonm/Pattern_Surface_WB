@@ -22,7 +22,41 @@ bodies or create relief across their clearance; Blender receives one CAD object
 per distinct source body. Multiple maps from the same body share that one CAD
 object while retaining separately clipped Diamond relief patches. Alignment is topology- and
 geometry-based, never a body name, face number or world-axis special case.
+When independently created logical atlases put both carrier interiors on the
+same side of their common physical rim, the transient registration may reflect
+one atlas across that rim before applying its translation. This unfolds the
+two charts into opposite logical half-planes; it does not resize, squeeze, or
+otherwise refit any Diamond cell.
 Existing single-map behavior is unchanged.
+
+`PAT-REQ-087` **In validation** — A selected Map Faces object may contain
+faces owned by more than one source Body. Before a Blender pattern job is
+created, the bridge must partition that payload by source Body, remapping only
+face-local identifiers in the transient job copies. It must then apply the same
+shared-phase registration used for separately selected maps. Blender receives
+one independently closed CAD component for each source Body, never a fused
+assembly, whether the user created one Map Faces object containing all faces or
+created maps separately. The original map payload, source placements, and map
+contract remain unchanged.
+
+`PAT-REQ-089` **In validation** — Independently mapped partial bodies can
+jointly form a closed wrap. After rigid registration, coincident physical rim
+samples whose logical positions differ identify the assembly cycle. Fit one
+common module side to that complete cycle using the user's per-module closure
+tolerance. Preserve the requested row height and relief height. Never wrap a
+partial component's coordinates or synthesize relief outside its own carrier.
+Validate both physical joins, including the join outside the registration tree,
+with the actual split-body document and a closed-wrap regression. An open chain
+must retain its requested spacing; incompatible cycles must report an error.
+
+`PAT-REQ-088` **In validation** — A Blender Diamond job containing more
+than one aligned map must use one shared Diamond lattice: module side, row
+height, and logical origin are derived once from the first selected map and
+applied unchanged to every component. A periodic closure fit may remain active
+only on that reference map, unless PAT-REQ-089 detects a joint assembly cycle;
+a later component must never refit its Diamond side
+to its own independent period. This is transient job metadata and must not
+modify a saved Map Faces payload or its preview grid.
 
 `PAT-REQ-084` **Implemented** — Blender relief patterns that offer the
 concave native-rim transition shall let the user independently select the lower

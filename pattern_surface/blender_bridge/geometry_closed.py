@@ -70,23 +70,40 @@ def dimensions(payload, params):
     row_height = height
     grid = payload.get("grid", {}) or {}
     origin = list(grid.get("origin", [0.0, 0.0]))[:2]
-    adjustments = payload.get("periodic_adjustments", []) or []
-    if len(adjustments) > 1 or (adjustments and int(adjustments[0].get("axis", -1)) != 0):
-        raise ValueError("Only one-axis periodic maps are supported by Blender.")
-    modules = None
-    if adjustments:
-        fit = adjustments[0]
-        period = float(fit["period"])
-        modules = max(1, round(period / requested_side))
-        tolerance = float(params.get("closure_fit_tolerance", 0.2))
-        if abs(period / modules - requested_side) > tolerance + 1.0e-8:
-            raise ValueError("Periodic Diamond closure exceeds the configured tolerance.")
-        side, origin[0] = period / modules, float(fit.get("lower", origin[0]))
+    # A shared assembly may contain independently periodic components. The
+    # first selected map fixes the visual Diamond lattice; refitting every
+    # later component to its own perimeter would make matching map grids
+    # produce differently sized Diamonds at their join.
+    shared = payload.get("shared_pattern_phase") or {}
+    if shared:
+        try:
+            side = float(shared["side"])
+            row_height = float(shared["row_height"])
+            origin = [float(value) for value in shared["origin"][:2]]
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("Shared Diamond phase is incomplete.")
+        if not all(math.isfinite(value) and value > 0.0 for value in (side, row_height)):
+            raise ValueError("Shared Diamond phase has invalid dimensions.")
+        modules = int(shared["modules"]) if shared.get("reference") and shared.get("modules") else None
+    else:
+        adjustments = payload.get("periodic_adjustments", []) or []
+        if len(adjustments) > 1 or (adjustments and int(adjustments[0].get("axis", -1)) != 0):
+            raise ValueError("Only one-axis periodic maps are supported by Blender.")
+        modules = None
+        if adjustments:
+            fit = adjustments[0]
+            period = float(fit["period"])
+            modules = max(1, round(period / requested_side))
+            tolerance = float(params.get("closure_fit_tolerance", 0.2))
+            if abs(period / modules - requested_side) > tolerance + 1.0e-8:
+                raise ValueError("Periodic Diamond closure exceeds the configured tolerance.")
+            side, origin[0] = period / modules, float(fit.get("lower", origin[0]))
     edge_mode = "all" if params.get("blend_all_edges", False) else params.get("edge_transition", "lower")
     return {"diamond_height": height, "relief": relief, "side": side,
             "row_height": row_height, "origin": origin, "modules": modules,
             "resolution": resolution, "finish_offset": finish_offset,
-            "contact": contact, "blend": blend, "edge_mode": edge_mode}
+            "contact": contact, "blend": blend, "edge_mode": edge_mode,
+            "shared_phase": bool(shared)}
 
 
 def _infer_axis(carrier):
@@ -240,6 +257,108 @@ def _build_planar(strips, dim, bounds):
                       "vertices": len(vertices), "planar_patches": len(patches),
                       "max_facet_plane_error_mm": max(metrics, default=0),
                       "bad_edges_before_weld": sum(n != 2 for n in edges.values())}}
+
+
+def _build_planar_shared(strips, dim, bounds):
+    """Build planar periodic reference strips directly in shared logical q.
+
+    The older planar path converted the lattice origin to each strip's local
+    centre. That is harmless for one closed body, but destroys phase across
+    separately exported components. Here q remains the lattice coordinate up
+    to clipping; only the resulting points are projected into the physical
+    planar strip.
+    """
+    vertices, faces, facet_ids, patches, metrics = [], [], [], [], []
+    side, height, origin = dim["side"], dim["row_height"], dim["origin"]
+    facet_count = 0
+    for strip in strips:
+        start_face, start_vertex = len(faces), len(vertices)
+        bottom_left, top_left, bottom_right, top_right = strip["corners"]
+        normal = strip["normal"]
+        low, high = strip["low"], strip["high"]
+        bottom, top = bounds[2], bounds[3]
+        u = _unit(_sub(bottom_right, bottom_left))
+        v = _unit(_cross3(normal, u)) if u is not None else None
+        width = math.sqrt(_dot(_sub(bottom_right, bottom_left), _sub(bottom_right, bottom_left)))
+        vertical = _dot(v, _sub(top_left, bottom_left)) if v is not None else 0.0
+        if u is None or v is None or width <= EPS or vertical <= EPS:
+            raise ValueError("Planar carrier frame has inconsistent orientation.")
+        if high - low <= EPS or top - bottom <= EPS:
+            raise ValueError("Planar carrier has a degenerate logical domain.")
+        logical_footprint = [(low, bottom, 0.0), (high, bottom, 0.0),
+                             (high, top, 0.0), (low, top, 0.0)]
+        cache, physical_base, outer = {}, [], []
+
+        def physical(point):
+            along = (float(point[0]) - low) / (high - low) * width
+            rise = (float(point[1]) - bottom) / (top - bottom) * vertical
+            return _add(bottom_left, _add(_scale(u, along), _scale(v, rise)))
+
+        def add(point):
+            key = tuple(round(float(value), 8) for value in point)
+            if key not in cache:
+                cache[key] = len(vertices)
+                base = physical(point)
+                vertices.append(_add(base, _scale(normal, point[2] + dim["finish_offset"])))
+                physical_base.append(_sub(base, _scale(normal, dim["contact"])))
+            return cache[key]
+
+        rows = range(math.floor((bottom-origin[1])/height)-1,
+                     math.ceil((top-origin[1])/height)+1)
+        cols = range(math.floor((low-origin[0])/side)-2,
+                     math.ceil((high-origin[0])/side)+2)
+        for row in rows:
+            for col in cols:
+                for cell in _lattice_cell(row, col, side, height, origin):
+                    apex = (sum(point[0] for point in cell)/3,
+                            sum(point[1] for point in cell)/3, dim["relief"])
+                    for index in range(3):
+                        original = [cell[index], cell[(index+1) % 3], apex]
+                        clipped = _clip(original, logical_footprint)
+                        clean = []
+                        for point in clipped:
+                            if not clean or _dot(_sub(point, clean[-1]), _sub(point, clean[-1])) > 1e-16:
+                                clean.append(point)
+                        if len(clean) > 1 and _dot(_sub(clean[0], clean[-1]), _sub(clean[0], clean[-1])) < 1e-16:
+                            clean.pop()
+                        physical_triangle = [physical(point) for point in original]
+                        facet_normal = _unit(_cross3(_sub(physical_triangle[1], physical_triangle[0]),
+                                                     _sub(physical_triangle[2], physical_triangle[0])))
+                        for index in range(1, len(clean)-1):
+                            triangle = [clean[0], clean[index], clean[index+1]]
+                            if abs(_cross(*triangle)) < 1e-10:
+                                continue
+                            ids = tuple(add(point) for point in triangle)
+                            outer.append(ids)
+                            faces.append(ids)
+                            facet_ids.append(facet_count+1)
+                            physical_piece = [physical(point) for point in triangle]
+                            metrics.append(max(abs(_dot(facet_normal, _sub(point, physical_triangle[0])))
+                                               for point in physical_piece))
+                        facet_count += 1
+        if not outer:
+            raise ValueError("A planar wall produced no relief facets.")
+        count = len(physical_base)
+        vertices.extend(physical_base)
+        faces.extend(tuple(index+count for index in reversed(face)) for face in outer)
+        facet_ids.extend([0] * len(outer))
+        edges = Counter(tuple(sorted(edge)) for face in outer for edge in zip(face, face[1:]+face[:1]))
+        for face in outer:
+            for left, right in zip(face, face[1:]+face[:1]):
+                if edges[tuple(sorted((left, right)))] == 1:
+                    faces.append((right, left, left+count, right+count))
+                    facet_ids.append(0)
+        patches.append({"vertex_start": start_vertex, "vertex_end": len(vertices),
+                        "face_start": start_face, "outer_face_end": start_face+len(outer),
+                        "face_end": len(faces)})
+    edges = Counter(tuple(sorted(edge)) for face in faces for edge in zip(face, face[1:]+face[:1]))
+    return {"vertices": vertices, "faces": faces, "facet_ids": facet_ids,
+            "dimensions": dim, "axis": None, "planar_patches": patches,
+            "clip_support_planes": False,
+            "stats": {"algorithm": "rigid_planar_shared_phase", "faces": len(faces),
+                      "vertices": len(vertices), "planar_patches": len(patches),
+                      "max_facet_plane_error_mm": max(metrics, default=0),
+                      "bad_edges_before_weld": sum(count != 2 for count in edges.values())}}
 
 
 def _regular_sampled_domain(carrier, bounds, dim):
@@ -489,7 +608,8 @@ def build(payload, params):
     period = side * dim["modules"] if dim["modules"] else None
     strips = _planar_strips(carrier, bounds, period)
     if strips and not dim["blend"]:
-        return _build_planar(strips, dim, bounds)
+        return (_build_planar_shared(strips, dim, bounds)
+                if dim.get("shared_phase") else _build_planar(strips, dim, bounds))
     if _regular_sampled_domain(carrier, bounds, dim):
         return _build_regular_sampled(payload, dim)
 
@@ -779,6 +899,41 @@ def build(payload, params):
                     if len({a,b,center})==3:
                         stitched.append((a,b,center));stitched_ids.append(fid)
         faces,facet_ids=stitched,stitched_ids
+    # Adjacent trimmed carrier facets can interpolate the same logical seam
+    # point with round-off-level differences.  The cell clipping path may then
+    # leave two vertices at one physical point; closing both boundary fans
+    # produces four side walls on that edge.  Canonicalize only vertices that
+    # agree in logical *and* physical space within the carrier tolerance.
+    # This is topology cleanup, not smoothing or a change to Diamond facets.
+    canonical = {}
+    remap = {}
+    for index, logical in enumerate(logical_vertices):
+        # Four decimals exceeds the 0.005 mm native-boundary chord tolerance
+        # while avoiding round-half-even splits such as 333.144374999 / .144375.
+        key = tuple(round(value, 4) for value in logical)
+        previous = canonical.get(key)
+        if previous is None:
+            canonical[key] = index
+            remap[index] = index
+            continue
+        if (sum((vertices[index][axis] - vertices[previous][axis]) ** 2
+                for axis in range(3)) <= 1.0e-10 and
+                sum((backing[index][axis] - backing[previous][axis]) ** 2
+                    for axis in range(3)) <= 1.0e-10):
+            remap[index] = previous
+        else:
+            # A self-overlapping logical atlas can legitimately reuse q at
+            # different physical points. Keep those branches distinct.
+            canonical[(key, index)] = index
+            remap[index] = index
+    if any(index != target for index, target in remap.items()):
+        compact_faces, compact_ids = [], []
+        for face, facet_id in zip(faces, facet_ids):
+            face = tuple(remap[index] for index in face)
+            if len(set(face)) == len(face):
+                compact_faces.append(face)
+                compact_ids.append(facet_id)
+        faces, facet_ids = compact_faces, compact_ids
     # A failed sample may allocate vertices before a triangle is rejected.
     # Compact both shells together, retaining every accepted face unchanged.
     used = sorted({index for face in faces for index in face})

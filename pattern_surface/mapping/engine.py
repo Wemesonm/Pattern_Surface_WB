@@ -12,7 +12,8 @@ from ..common.contracts import DEFAULT_MAP_CLOSURE_TOLERANCE
 
 def create_map(column_count=None, row_count=None,
                closure_tolerance=DEFAULT_MAP_CLOSURE_TOLERANCE,
-               column_width=None, row_height=None):
+               column_width=None, row_height=None, phase_alignment="global",
+               row_alignment="global"):
     module = maybe_reload(core_engine)
     spacing = {}
     if column_width is not None:
@@ -24,4 +25,6 @@ def create_map(column_count=None, row_count=None,
         column_count=column_count,
         row_count=row_count,
         closure_tolerance=closure_tolerance,
+        phase_alignment=phase_alignment,
+        row_alignment=row_alignment,
     )

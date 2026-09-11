@@ -116,9 +116,43 @@ alternating half-column offset.
 `MAP-REQ-024` **Implemented in 0.1.4** - Column width and row height are independent. Map
 Faces must not derive either value from an equilateral-triangle formula.
 
-`MAP-REQ-025` **Implemented in 0.1.4** - Grid phase is centered on the selected connected
-component. The phase origin is stored separately and must not translate, rotate,
-scale, or otherwise modify the physical carrier.
+`MAP-REQ-025` **Implemented in 0.1.4** - Grid phase is stored separately and
+must not translate, rotate, scale, or otherwise modify the physical carrier.
+
+`MAP-REQ-030` **In validation** - When all selected faces belong to one source
+Body, Map Faces establishes one persistent Body grid phase. The first saved map
+is the phase root: its lateral grid origin is the centre of its selected logical
+region. While creating each later map, Map Faces must find a topological route
+through the source BRep from an already mapped face to the newly selected face,
+including unselected intermediate faces when necessary. It transports the
+root's logical orientation and translation along that route, then applies the
+result only to the new carrier atlas. Any metric scale accumulated through a
+curved intermediate seam must be discarded: the new carrier retains its own
+physical metric and the user's pattern dimensions. Existing maps and their
+payloads are read-only phase references and must never be repositioned when a
+new map appears. The bottom-to-top phase remains anchored at each map's actual
+physical lower carrier boundary, measured in the owning Body's placement. This
+prevents an unrelated, disconnected wall from inheriting a vertical offset by
+projecting a remote Body vertex through its carrier. Separate Map Faces runs
+therefore retain a common phase across adjacent and non-adjacent faces, without
+moving physical carrier points or changing the map payload schema. A multi-body
+map keeps the centred fallback. The rule must use source topology, the source
+owner placement, and carrier geometry; it must not name a body, face, fixture,
+screen direction, or world axis. When a selected source is not inside a
+PartDesign Body (for example, a solid created by a split operation), its own
+Shape and Placement become the phase owner. A later map belonging to a
+different phase owner may join the phase only through a coincident physical
+carrier boundary; it then adopts the oldest compatible map's phase. A
+disconnected owner remains independent until such a boundary is available.
+
+`MAP-REQ-031` **In validation** - Map Faces offers independent placement
+choices for vertical and horizontal preview-grid lines. Vertical lines may use
+**Left**, **Centre**, **Right**, or **Follow global phase**; horizontal lines
+may use **Bottom**, **Centre**, **Top**, or **Follow global phase**. The local
+choices place a line on the corresponding selected-carrier edge; global is the
+default and uses the first same-Body map as the phase root. The choices adjust
+only the existing two-number grid origin. They must not move carrier vertices,
+add payload fields, or imply a Diamond size.
 
 `MAP-REQ-026` **Implemented in 0.1.4** - Remove Map Faces dependencies on Diamond constants
 and limits. Characterize `snap_lower_curved_strips_to_grid()` before changing it;
