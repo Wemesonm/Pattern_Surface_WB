@@ -14,6 +14,14 @@ def _last(key, default):
     return App.ParamGet(PREFERENCE).GetFloat(key, default)
 
 
+def _edge_mode():
+    settings = App.ParamGet(PREFERENCE)
+    mode = settings.GetString("BlendEdgeMode", "")
+    if mode in ("lower", "upper"):
+        return mode
+    return "lower"
+
+
 def get_parameters(map_object=None):
     from PySide import QtGui
     try:
@@ -53,9 +61,25 @@ def get_parameters(map_object=None):
     all_edges.setChecked(App.ParamGet(PREFERENCE).GetBool(
         "BlendAllEdges", bool(_last("BlendAllEdges", 0.0))))
     layout.addRow(all_edges)
+    edge_group = QtWidgets.QButtonGroup(dialog)
+    lower_edge = QtWidgets.QRadioButton("Bottom edge", dialog)
+    upper_edge = QtWidgets.QRadioButton("Top edge", dialog)
+    edge_group.addButton(lower_edge)
+    edge_group.addButton(upper_edge)
+    (upper_edge if _edge_mode() == "upper" else lower_edge).setChecked(True)
+    edge_layout = QtWidgets.QHBoxLayout()
+    edge_layout.addWidget(lower_edge)
+    edge_layout.addWidget(upper_edge)
+    edge_widget = QtWidgets.QWidget(dialog)
+    edge_widget.setLayout(edge_layout)
+    layout.addRow("Concave transition edge:", edge_widget)
+    def update_edge_choice(checked):
+        edge_widget.setEnabled(not checked)
+    all_edges.toggled.connect(update_edge_choice)
+    update_edge_choice(all_edges.isChecked())
     layout.addRow(QtWidgets.QLabel(
         "Width of the rounded transition. 6 mm gives a longer, gentler finish; 0 mm disables it.\n"
-        "Unchecked: lower edges only. Checked: the complete face boundary.", dialog))
+        "Choose bottom or top in the map's local orientation. Apply to all edges overrides the choice.", dialog))
 
     buttons = QtWidgets.QDialogButtonBox(
         QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
@@ -69,11 +93,13 @@ def get_parameters(map_object=None):
     values = {"rib_pitch": float(pitch.value()), "rib_height": float(height.value()),
               "rib_angle": float(angle.value()), "resolution": int(resolution.value()),
               "finish_offset": 0.045, "contact": 0.25,
-              "base_blend": float(blend.value()), "blend_all_edges": all_edges.isChecked()}
+              "base_blend": float(blend.value()), "blend_all_edges": all_edges.isChecked(),
+              "edge_transition": "upper" if upper_edge.isChecked() else "lower"}
     settings = App.ParamGet(PREFERENCE)
     for key, value in (("Pitch", values["rib_pitch"]), ("Height", values["rib_height"]),
                        ("Angle", values["rib_angle"]), ("Resolution", values["resolution"]),
                        ("BaseBlend", values["base_blend"])):
         settings.SetFloat(key, value)
     settings.SetBool("BlendAllEdges", values["blend_all_edges"])
+    settings.SetString("BlendEdgeMode", values["edge_transition"])
     return values

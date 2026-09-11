@@ -20,6 +20,8 @@ _interpolate = _COMMON._interpolate
 _scale = _COMMON._scale
 _sub = _COMMON._sub
 _unit = _COMMON._unit
+NativeBoundaryDistance = _COMMON.NativeBoundaryDistance
+concave_relief = _COMMON.concave_relief
 
 
 def _subdivide_facet(triangle, subdivisions):
@@ -50,8 +52,11 @@ def dimensions(payload, params):
     resolution = int(params.get("resolution", 8))
     finish_offset = float(params.get("finish_offset", 0.045))
     contact = float(params.get("contact", 0.25))
+    blend = float(params.get("base_blend", 0.0))
     if not all(math.isfinite(v) and v > 0 for v in (height, relief, finish_offset, contact)):
         raise ValueError("Diamond parameters must be finite and positive.")
+    if not math.isfinite(blend) or blend < 0.0:
+        raise ValueError("Edge transition width must be finite and nonnegative.")
     if not 1 <= resolution <= 40:
         raise ValueError("Resolution must be between 1 and 40.")
     # Map Faces divisions are only a visual/reference grid.  Diamond spacing
@@ -77,10 +82,11 @@ def dimensions(payload, params):
         if abs(period / modules - requested_side) > tolerance + 1.0e-8:
             raise ValueError("Periodic Diamond closure exceeds the configured tolerance.")
         side, origin[0] = period / modules, float(fit.get("lower", origin[0]))
+    edge_mode = "all" if params.get("blend_all_edges", False) else params.get("edge_transition", "lower")
     return {"diamond_height": height, "relief": relief, "side": side,
             "row_height": row_height, "origin": origin, "modules": modules,
             "resolution": resolution, "finish_offset": finish_offset,
-            "contact": contact}
+            "contact": contact, "blend": blend, "edge_mode": edge_mode}
 
 
 def _infer_axis(carrier):
@@ -258,6 +264,8 @@ def _build_regular_sampled(payload, dim):
     vertices, faces, facet_ids = [], [], []
     backing, mapped_cache = [], {}
     raw_cache = {}
+    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"])
+                if dim["blend"] else None)
 
     # The map carrier is a dense sampling mesh, not the pattern topology.
     # Project each logical lattice point once and build each logical cell once.
@@ -321,7 +329,9 @@ def _build_regular_sampled(payload, dim):
         key = (round(point[0], 7), round(point[1], 7))
         if key not in raw_cache:
             triangle = locate(point)
-            raw_cache[key] = _interpolate(point, triangle) if triangle else None
+            mapped = _interpolate(point, triangle) if triangle else None
+            raw_cache[key] = ((*mapped, triangle.get("component", 0))
+                              if mapped is not None else None)
         return raw_cache[key]
 
     def map_point(point):
@@ -333,7 +343,7 @@ def _build_regular_sampled(payload, dim):
         if value is None:
             mapped_cache[key] = None
             return None
-        physical, carrier_normal = value
+        physical, carrier_normal, component = value
         # Blend the placement normal from neighboring physical points.  This
         # removes the serrated strip caused by switching source faces while
         # keeping every generated triangle flat and faceted.
@@ -357,18 +367,20 @@ def _build_regular_sampled(payload, dim):
                 if _dot(candidate, carrier_normal) < 0.0:
                     candidate = _scale(candidate, -1.0)
                 normal = candidate
-        mapped_cache[key] = (physical, normal)
+        mapped_cache[key] = (physical, normal, component)
         return mapped_cache[key]
 
     def point_pair(point):
         value = map_point(point[:2])
         if value is None:
             return None
-        physical, normal = value
+        physical, normal, component = value
         # The mapped carrier already provides the local surface normal.  Do
         # not project it onto a global or longitudinal axis: that loses the
         # wall/fillet component and creates a gap exactly at the lower corner.
-        outer = _add(physical, _scale(normal, point[2] + dim["finish_offset"]))
+        relief = concave_relief(point[2], boundary.distance(physical, component),
+                                dim["blend"], dim["relief"]) if boundary else point[2]
+        outer = _add(physical, _scale(normal, relief + dim["finish_offset"]))
         inner = _sub(physical, _scale(normal, dim["contact"]))
         return outer, inner
 
@@ -461,6 +473,8 @@ def build(payload, params):
     backing, mapped_cache = [], {}
     logical_vertices = []
     raw_cache = {}
+    boundary = (NativeBoundaryDistance(payload, dim["blend"], dim["edge_mode"])
+                if dim["blend"] else None)
 
     # The map carrier is a dense sampling mesh, not the pattern topology.
     # Project each logical lattice point once and build each logical cell once.
@@ -472,7 +486,7 @@ def build(payload, params):
     min_x, max_x, min_y, max_y = (float(value) for value in bounds)
     period = side * dim["modules"] if dim["modules"] else None
     strips = _planar_strips(carrier, bounds, period)
-    if strips:
+    if strips and not dim["blend"]:
         return _build_planar(strips, dim, bounds)
     if _regular_sampled_domain(carrier, bounds, dim):
         return _build_regular_sampled(payload, dim)
@@ -562,7 +576,9 @@ def build(payload, params):
         key = (round(point[0], 7), round(point[1], 7))
         if key not in raw_cache:
             triangle = locate(point)
-            raw_cache[key] = _interpolate(point, triangle) if triangle else None
+            mapped = _interpolate(point, triangle) if triangle else None
+            raw_cache[key] = ((*mapped, triangle.get("component", 0))
+                              if mapped is not None else None)
         return raw_cache[key]
 
     def map_point(point):
@@ -574,24 +590,26 @@ def build(payload, params):
         if value is None:
             mapped_cache[key] = None
             return None
-        physical, carrier_normal = value
+        physical, carrier_normal, component = value
         # The native CAD normal field is continuous across tangent source
         # faces. Finite differences of clipped carrier triangles can instead
         # measure tessellation chords, or jump when a neighbor crosses a trim.
         # Use the interpolated CAD field for this boundary-aware path.
         normal = carrier_normal
-        mapped_cache[key] = (physical, normal)
+        mapped_cache[key] = (physical, normal, component)
         return mapped_cache[key]
 
     def point_pair(point):
         value = map_point(point[:2])
         if value is None:
             return None
-        physical, normal = value
+        physical, normal, component = value
         # PAT-REQ-076: use the same full normal as the regular strip path.
         # Removing its longitudinal component changes the fillet relief merely
         # because another part of the domain has a trimmed boundary.
-        outer = _add(physical, _scale(normal, point[2] + dim["finish_offset"]))
+        relief = concave_relief(point[2], boundary.distance(physical, component),
+                                dim["blend"], dim["relief"]) if boundary else point[2]
+        outer = _add(physical, _scale(normal, relief + dim["finish_offset"]))
         inner = _sub(physical, _scale(normal, dim["contact"]))
         return outer, inner
 
@@ -718,8 +736,8 @@ def build(payload, params):
     # Stitch collinear carrier boundary nodes before constructing side walls.
     # Otherwise a T-junction creates two internal caps sharing a four-face edge.
     counts=Counter(tuple(sorted(e)) for f in faces for e in zip(f,f[1:]+f[:1]))
-    boundary=[e for e,n in counts.items() if n==1]
-    nodes={i for e in boundary for i in e}
+    open_edges=[e for e,n in counts.items() if n==1]
+    nodes={i for e in open_edges for i in e}
     bins={}
     bin_size=max(target,0.1)
     for i in nodes:
@@ -728,7 +746,7 @@ def build(payload, params):
             q=(p[0]+shift,p[1],p[2])
             bins.setdefault((math.floor(q[0]/bin_size),math.floor(q[1]/bin_size)),[]).append((i,q))
     cuts={}
-    for a,b in boundary:
+    for a,b in open_edges:
         pa,pb=unwrap([logical_vertices[a],logical_vertices[b]])
         d=[pb[k]-pa[k] for k in range(3)];length=sum(x*x for x in d)
         if length<1e-12:continue

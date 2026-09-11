@@ -29,6 +29,10 @@ CURVED_RELIEF_FACTOR_KEY = "LastCurvedReliefFactor"
 CELL_GAP_KEY = "LastCellGap"
 CELL_GAP_X_KEY = "LastCellGapX"
 CELL_GAP_Y_KEY = "LastCellGapY"
+BLENDER_BASE_BLEND_KEY = "BlenderBaseBlend"
+BLENDER_EDGE_MODE_KEY = "BlenderEdgeMode"
+BLENDER_ALL_EDGES_KEY = "BlenderBlendAllEdges"
+BLENDER_RESOLUTION_KEY = "BlenderResolution"
 
 
 def preferences():
@@ -134,7 +138,7 @@ def _map_cell_dimensions(map_object):
         return None
 
 
-def get_parameters(map_object=None):
+def get_parameters(map_object=None, blender=False):
     from PySide import QtGui
     try:
         from PySide import QtWidgets
@@ -171,6 +175,40 @@ def get_parameters(map_object=None):
     closure_tolerance.setValue(last_closure_fit_tolerance())
     layout.addRow("Closure fit tolerance:", closure_tolerance)
 
+    edge_blend = resolution = None
+    lower_edge = upper_edge = None
+    if blender:
+        resolution = QtWidgets.QSpinBox(dialog)
+        resolution.setRange(1, 40)
+        resolution.setValue(int(round(stored_float(BLENDER_RESOLUTION_KEY, 8.0))))
+        layout.addRow("Surface resolution:", resolution)
+        edge_blend = QtWidgets.QDoubleSpinBox(dialog)
+        edge_blend.setRange(0.0, MAX_DIAMOND_HEIGHT)
+        edge_blend.setDecimals(3)
+        edge_blend.setSuffix(" mm")
+        edge_blend.setValue(stored_float(BLENDER_BASE_BLEND_KEY, 6.0))
+        layout.addRow("Concave edge transition:", edge_blend)
+        mode = preferences().GetString(BLENDER_EDGE_MODE_KEY, "lower")
+        lower_edge = QtWidgets.QCheckBox("Bottom edge", dialog)
+        upper_edge = QtWidgets.QCheckBox("Top edge", dialog)
+        if mode == "none":
+            pass
+        elif mode == "upper":
+            upper_edge.setChecked(True)
+        elif mode == "both" or preferences().GetBool(BLENDER_ALL_EDGES_KEY, False):
+            lower_edge.setChecked(True)
+            upper_edge.setChecked(True)
+        else:
+            lower_edge.setChecked(True)
+        choices = QtWidgets.QWidget(dialog)
+        choices_layout = QtWidgets.QHBoxLayout(choices)
+        choices_layout.setContentsMargins(0, 0, 0, 0)
+        choices_layout.addWidget(lower_edge)
+        choices_layout.addWidget(upper_edge)
+        layout.addRow("Concave transition edge:", choices)
+        layout.addRow(QtWidgets.QLabel(
+            "Mark one or both edges in the map's local orientation. Leave both unchecked for no concave transition."))
+
     buttons = QtWidgets.QDialogButtonBox(
         QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
         parent=dialog,
@@ -182,12 +220,26 @@ def get_parameters(map_object=None):
         return None
     diamond_value = float(diamond_height.value())
     pyramid_value = float(pyramid_height.value())
-    return {
+    values = {
         "diamond_height": diamond_value,
         "pyramid_height": pyramid_value,
         "height": pyramid_value,
         "closure_fit_tolerance": float(closure_tolerance.value()),
     }
+    if blender:
+        values.update({
+            "base_blend": (float(edge_blend.value())
+                           if lower_edge.isChecked() or upper_edge.isChecked() else 0.0),
+            "blend_all_edges": False,
+            "edge_transition": ("both" if lower_edge.isChecked() and upper_edge.isChecked() else
+                                "upper" if upper_edge.isChecked() else
+                                "lower" if lower_edge.isChecked() else "none"),
+            "resolution": int(resolution.value()),
+        })
+        preferences().SetFloat(BLENDER_BASE_BLEND_KEY, values["base_blend"])
+        preferences().SetString(BLENDER_EDGE_MODE_KEY, values["edge_transition"])
+        preferences().SetFloat(BLENDER_RESOLUTION_KEY, values["resolution"])
+    return values
 
 def get_prototype_parameters(map_object=None):
     from PySide import QtGui

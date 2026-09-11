@@ -87,6 +87,14 @@ class BlenderRibsTests(unittest.TestCase):
                                  lower["vertices"][:len(lower["vertices"])//2]):
             if after[1] >= 3:
                 self.assertAlmostEqual(before[2], after[2])
+        upper = ribs.build(payload, dict(params, base_blend=3,
+                                         edge_transition="upper"))
+        for before, after in zip(baseline["vertices"][:len(baseline["vertices"])//2],
+                                 upper["vertices"][:len(upper["vertices"])//2]):
+            if after[1] <= 9:
+                self.assertAlmostEqual(before[2], after[2])
+            if abs(after[1] - 12) < 1e-7:
+                self.assertAlmostEqual(0.045, after[2])
         # PAT-REQ-081: a longer finish preserves the skin instead of crossing
         # into the body, and keeps the interior wave at its original height.
         gentle = ribs.build(payload, dict(params, base_blend=6, blend_all_edges=True))
@@ -180,3 +188,16 @@ class BlenderRibsTests(unittest.TestCase):
                   "worker.py").read_text(encoding="utf-8")
         self.assertIn("def _clear_factory_scene()", source)
         self.assertIn("_clear_factory_scene()", source)
+
+    def test_edge_choice_is_available_to_each_blender_pattern(self):
+        ribs = (Path(__file__).parents[1] / "pattern_surface" / "patterns" /
+                "ribs" / "parameters.py").read_text(encoding="utf-8")
+        diamond = (Path(__file__).parents[1] / "pattern_surface" / "patterns" /
+                   "diamond" / "parameters.py").read_text(encoding="utf-8")
+        for source in (ribs, diamond):
+            self.assertIn('"Bottom edge"', source)
+            self.assertIn('"Top edge"', source)
+            self.assertIn('"edge_transition"', source)
+        self.assertIn('QtWidgets.QCheckBox("Bottom edge"', diamond)
+        self.assertIn('QtWidgets.QCheckBox("Top edge"', diamond)
+        self.assertIn('"Surface resolution:"', diamond)
