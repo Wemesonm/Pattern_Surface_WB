@@ -115,6 +115,8 @@ class BlenderSourceTests(unittest.TestCase):
         worker = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/worker.py').read_text(encoding='utf-8')
         self.assertIn('job["components"] = components', source)
         self.assertIn('"shared_phase"', source)
+        self.assertIn('"shared_map_phase"', source)
+        self.assertIn('def _attach_shared_map_phase', source)
         self.assertIn('components_by_sources', source)
         self.assertIn('"maps": [{key: value', source)
         self.assertIn('Auzyron Shared Pattern Assembly', worker)

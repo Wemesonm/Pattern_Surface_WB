@@ -163,17 +163,23 @@ lattice phase. This transformation is job-local: it does not rewrite
 `MapPayloadChunks`, alter source placements, or change any stored map grid.
 Each component retains its own carrier, source-body export and physical clipping.
 
-`DATA-REQ-059` **In validation** — A shared Blender Diamond job may add
-transient `shared_pattern_phase` metadata to each packaged payload. It holds
-the reference Diamond side, row height, and logical origin. This metadata is
-not written to Map Faces; it makes independently mapped, physically adjacent
-components use identical Diamond dimensions. Only the reference component may
-apply its own periodic closure fit. A joint assembly cycle (PAT-REQ-089) may
-instead supply transient `assembly_period` and `assembly_modules` fields. Its
-common side is fitted once for all components, while `modules` remains null:
-partial carriers must not be individually periodicized. Saved maps are unchanged.
+`DATA-REQ-059` **Implemented** — Every Blender pattern job with two or more
+aligned maps adds transient `shared_map_phase` metadata to each packaged
+payload. It holds the common logical origin and, only for a physically closed
+assembly, its logical `assembly_period`. This is pattern-neutral infrastructure:
+it is not written to Map Faces and it contains no Diamond size, row height,
+relief, module count, or pattern identifier. Each pattern package consumes the
+common phase and converts the period into its own repetition dimensions from
+the user-selected size. Partial carriers remain nonperiodic and are clipped
+only against their own physical carrier.
 
-`DATA-REQ-058` **In validation** — The Blender bridge may partition one
+`DATA-REQ-060` **Implemented** — A pattern may add its own transient metadata
+alongside `shared_map_phase`. Diamond uses `shared_pattern_phase` for its fitted
+side, row height, and module count. This pattern-specific record is derived on
+each run from `shared_map_phase` and the current dialog values; no count or
+dimension from a previous model or run is persisted.
+
+`DATA-REQ-058` **Implemented** — The Blender bridge may partition one
 multi-Body map payload into one transient payload per source Body. It retains
 only the corresponding face records, carrier triangles, native boundary
 segments, adjacency, components, and periodic records, with face-local indexes
