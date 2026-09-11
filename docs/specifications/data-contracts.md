@@ -12,10 +12,12 @@ breaking consumers that follow these contracts.
 sampled from native selected-face wire edges with 0.005 mm chord tolerance.
 Shared selected edges and periodic seams are excluded by topological incidence,
 never triangle incidence. Records retain component, source face, ordered physical
-points and inward atlas direction for lower-edge classification. Extraction must
-verify closed boundary cycles and must not rewrite saved maps. Legacy readers
-ignore this optional field; Blender Diamond requests it only when its optional
-concave rim transition is enabled.
+points, local inward atlas direction, and an `outer` or `inner` closed-loop
+role. Extraction must orient fragments by their local inward direction, verify
+closed boundary cycles, and determine the exterior as the largest enclosed
+logical-atlas loop in each component. It must not rewrite saved maps. Legacy readers treat a missing role as `outer`. Blender
+patterns request this optional field only when their optional concave rim
+transition is enabled.
 
 `DATA-REQ-053` **Implemented** — Blender packaging refreshes legacy trimmed curved
 carrier domains from referenced CAD faces without rewriting saved maps. Optional
@@ -170,7 +172,9 @@ assembly, its logical `assembly_period`. This is pattern-neutral infrastructure:
 it is not written to Map Faces and it contains no Diamond size, row height,
 relief, module count, or pattern identifier. Each pattern package consumes the
 common phase and converts the period into its own repetition dimensions from
-the user-selected size. Partial carriers remain nonperiodic and are clipped
+the user-selected size. The neutral Blender bridge exposes this record through
+one shared phase reader; pattern packages must not reimplement its parsing or
+assembly-cycle detection. Partial carriers remain nonperiodic and are clipped
 only against their own physical carrier.
 
 `DATA-REQ-060` **Implemented** — A pattern may add its own transient metadata
@@ -183,7 +187,11 @@ dimension from a previous model or run is persisted.
 multi-Body map payload into one transient payload per source Body. It retains
 only the corresponding face records, carrier triangles, native boundary
 segments, adjacency, components, and periodic records, with face-local indexes
-remapped consistently. This is a job-only representation: no FreeCAD object or
+and component identifiers remapped consistently across every retained record.
+Newly exposed boundaries between source Bodies are rebuilt from native CAD
+contours before shared-phase registration, even when edge transitions are off.
+Periodic pairs referencing removed faces are discarded; retained pairs use the
+partition face indexes. This is a job-only representation: no FreeCAD object or
 serialized map payload is edited.
 
 ## Pattern Object and Payload

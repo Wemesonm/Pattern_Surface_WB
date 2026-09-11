@@ -194,12 +194,6 @@ def _copy_payload_for_body(document, payload, owner_name):
         return None
     remap = {old: new for new, (old, _record) in enumerate(selected)}
     result = copy.deepcopy(payload)
-    result["faces"] = []
-    for new_index, (_old_index, record) in enumerate(selected):
-        clone = copy.deepcopy(record)
-        clone["index"] = new_index
-        result["faces"].append(clone)
-
     old_components = list(payload.get("components", []) or [])
     component_remap = {}
     components = []
@@ -212,6 +206,17 @@ def _copy_payload_for_body(document, payload, owner_name):
         components = [list(range(len(selected)))]
         component_remap = {0: 0}
     result["components"] = components
+    result["faces"] = []
+    for new_index, (_old_index, record) in enumerate(selected):
+        clone = copy.deepcopy(record)
+        clone["index"] = new_index
+        # The bridge creates an independent carrier for each movable Body.
+        # Its face records must use the same local component numbering as its
+        # carrier triangles. Otherwise native boundary curves rebuilt from
+        # these records are indexed under the original packed-map component
+        # and cannot attenuate the matching relief samples.
+        clone["component"] = component_remap.get(int(clone.get("component", 0)), 0)
+        result["faces"].append(clone)
 
     def belongs(record):
         return int(record.get("face", -1)) in remap
@@ -238,10 +243,20 @@ def _copy_payload_for_body(document, payload, owner_name):
     result["periodic_seams"] = [[remap[left], remap[right]]
                                 for left, right in payload.get("periodic_seams", []) or []
                                 if left in remap and right in remap]
-    result["periodic_adjustments"] = [
-        dict(copy.deepcopy(record), component=component_remap[int(record.get("component", 0))])
-        for record in payload.get("periodic_adjustments", []) or []
-        if int(record.get("component", 0)) in component_remap]
+    result["periodic_adjustments"] = []
+    for record in payload.get("periodic_adjustments", []) or []:
+        if int(record.get("component", 0)) not in component_remap:
+            continue
+        pairs = record.get("pairs") or ([record["pair"]] if record.get("pair") else [])
+        retained = [[remap[a], remap[b]] for a, b in pairs if a in remap and b in remap]
+        if pairs and not retained:
+            continue
+        clone = copy.deepcopy(record)
+        clone["component"] = component_remap[int(record.get("component", 0))]
+        if pairs:
+            clone["pairs"] = retained
+            clone["pair"] = retained[0]
+        result["periodic_adjustments"].append(clone)
     qs = [vertex["q"] for triangle in carrier for vertex in triangle.get("v", [])]
     if qs:
         result["bounds"] = [min(q[0] for q in qs), max(q[0] for q in qs),
@@ -278,6 +293,13 @@ def _attach_shared_map_phase(payloads):
     phase = {"origin": [float(value) for value in grid.get("origin", [0.0, 0.0])[:2]]}
     from .shared_phase import assembly_cycle_period
     period = assembly_cycle_period(payloads)
+    if period is None:
+        # A joint atlas can retain its closure seam inside one partition.
+        # Its native period still governs all registered portions of that atlas.
+        periods = [float(r["period"]) for p in payloads
+                   for r in p.get("periodic_adjustments", []) if "period" in r]
+        if periods and max(periods) - min(periods) < 1e-6:
+            period = periods[0]
     if period is not None:
         phase["assembly_period"] = float(period)
     for payload in payloads:
@@ -352,9 +374,11 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
     payloads = []
     payload_sources = []
     for item in map_objects:
-        for owner_name, payload in _payloads_by_source_body(document, _payload(item)):
+        partitions = _payloads_by_source_body(document, _payload(item))
+        for owner_name, payload in partitions:
             payloads.append(prepare_reference(
-                document, payload, include_boundary_curves=include_boundary_curves))
+                document, payload, include_boundary_curves=include_boundary_curves,
+                rebuild_boundary=len(partitions) > 1))
             payload_sources.append((item, owner_name))
 
     root = job_root(root)

@@ -1,7 +1,7 @@
 """Native CAD boundary references for transient Blender packages."""
 
 
-def prepare_reference(document, payload, include_boundary_curves=False):
+def prepare_reference(document, payload, include_boundary_curves=False, rebuild_boundary=False):
     """Refresh trimmed curved domains without rewriting the saved map."""
     import Part
     from .. import core_engine as core
@@ -19,9 +19,20 @@ def prepare_reference(document, payload, include_boundary_curves=False):
     result["carrier_triangles"] = triangles
     result["triangles"] = triangles
     result["boundary_support_planes"] = support_planes(entries)
-    if include_boundary_curves:
+    if include_boundary_curves or rebuild_boundary:
         from .native_boundary import boundary_curves
-        result["native_boundary_curves"] = boundary_curves(entries)
+        native = boundary_curves(entries)
+        if include_boundary_curves:
+            result["native_boundary_curves"] = native
+        if rebuild_boundary:
+            # DATA-REQ-058: a cut between Bodies becomes an exterior rim.
+            result["external_segments"] = []
+            for curve in native["curves"]:
+                vertices = [dict(p=p, q=q) for p, q in
+                            zip(curve["points"], curve["logical_points"])]
+                result["external_segments"].extend(
+                    dict(face=curve["face"], component=curve["component"], a=a, b=b)
+                    for a, b in zip(vertices, vertices[1:]))
     return result
 
 

@@ -123,6 +123,12 @@ class BlenderSourceTests(unittest.TestCase):
         self.assertIn('Auzyron CAD Body — {}', worker)
         self.assertIn('"patterns": patterns', worker)
 
+    def test_interactive_blender_reframes_after_its_viewport_is_ready(self):
+        worker = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/worker.py').read_text(encoding='utf-8')
+        self.assertIn('def _schedule_interactive_frame', worker)
+        self.assertIn('bpy.app.timers.register(_frame_after_ui_ready, first_interval=0.35)', worker)
+        self.assertGreaterEqual(worker.count('_schedule_interactive_frame()'), 3)
+
 class MultiBodyMapBridgeTests(unittest.TestCase):
     """PAT-REQ-087/DATA-REQ-058 transient multi-body map partitioning."""
 
@@ -158,8 +164,8 @@ class MultiBodyMapBridgeTests(unittest.TestCase):
         d, e, f = point(12, 0), point(22, 0), point(12, 10)
         return {
             'faces': [
-                {'index': 10, 'object': 'FeatureA', 'sub': 'Face1'},
-                {'index': 20, 'object': 'FeatureB', 'sub': 'Face1'},
+                {'index': 10, 'component': 0, 'object': 'FeatureA', 'sub': 'Face1'},
+                {'index': 20, 'component': 1, 'object': 'FeatureB', 'sub': 'Face1'},
             ],
             'carrier_triangles': [
                 {'face': 10, 'component': 0, 'v': [a, b, c]},
@@ -186,6 +192,7 @@ class MultiBodyMapBridgeTests(unittest.TestCase):
         self.assertEqual([10, 20], [face['index'] for face in original['faces']])
         for owner, payload in split:
             self.assertEqual([0], [face['index'] for face in payload['faces']])
+            self.assertEqual([0], [face['component'] for face in payload['faces']])
             self.assertEqual([0], [triangle['face'] for triangle in payload['carrier_triangles']])
             self.assertEqual([0], [segment['face'] for segment in payload['external_segments']])
             self.assertEqual([[0]], payload['components'])
@@ -217,3 +224,16 @@ class MultiBodyMapBridgeTests(unittest.TestCase):
         self.assertEqual(2, len(data['components']))
         self.assertEqual([['BodyA'], ['BodyB']], [component['source_bodies'] for component in data['components']])
         self.assertEqual([1, 1], [len(component['maps']) for component in data['components']])
+
+    def test_data_req_058_periodic_pairs_cannot_reference_another_body(self):
+        from pattern_surface.blender_bridge.job import _copy_payload_for_body
+        payload = self._payload()
+        payload['faces'][1]['component'] = 0
+        payload['components'] = [[10, 20]]
+        payload['periodic_adjustments'] = [dict(component=0, period=30,
+                                               pair=[10, 20], pairs=[[10, 20]])]
+        body_a, body_b = self._Body('BodyA'), self._Body('BodyB')
+        doc = self._Document([self._Feature('FeatureA', body_a),
+                              self._Feature('FeatureB', body_b)])
+        result = _copy_payload_for_body(doc, payload, 'BodyA')
+        self.assertEqual([], result['periodic_adjustments'])

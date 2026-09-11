@@ -61,8 +61,12 @@ modify a saved Map Faces payload or its preview grid.
 
 `PAT-REQ-084` **Implemented** — Blender relief patterns that offer the
 concave native-rim transition shall let the user independently select the lower
-and upper map rims. Selecting both applies the transition to both rims;
-selecting neither disables it. The classification must
+and upper exterior map rims, plus complete internal opening contours.
+Selecting both exterior rims applies the transition to both; selecting neither
+and no opening disables it. An enabled internal contour rounds its entire
+native loop, including portions that are locally vertical. It must not select a
+vertical exterior rim. The existing all-edges choice retains its literal meaning
+and includes both exterior and internal rims. The classification must
 use the Map Faces local inward atlas direction and native boundary curves,
 never a global axis, source face name or specific body topology. Diamond and
 Diagonal Ribs consume the same neutral boundary-distance and concave-envelope

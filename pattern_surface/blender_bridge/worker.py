@@ -158,6 +158,33 @@ def _frame_selected_viewport():
             pass
 
 
+def _schedule_interactive_frame():
+    """Repeat the fit after Blender has finished creating its first viewport.
+
+    During an interactive launch Blender can execute this worker before the
+    initial VIEW_3D region has completed its layout. The immediate framing is
+    still useful for a saved file, while this one-shot timer makes the visible
+    window use the final mesh bounds rather than its startup-scale bounds.
+    """
+    if not _interactive():
+        return
+    import bpy
+
+    def _frame_after_ui_ready():
+        try:
+            bpy.context.view_layer.update()
+            _frame_visible_scene()
+            _frame_with_selection()
+            bpy.ops.object.select_all(action="DESELECT")
+            bpy.context.view_layer.objects.active = None
+        except RuntimeError:
+            # A user may close Blender before the one-shot timer runs.
+            pass
+        return None
+
+    bpy.app.timers.register(_frame_after_ui_ready, first_interval=0.35)
+
+
 def _weld_mesh(obj, distance=0.00002, preserve_winding=False):
     import bmesh
     bm = bmesh.new()
@@ -422,6 +449,7 @@ def _build_shared_phase_scene(job):
     _frame_with_selection()
     bpy.ops.object.select_all(action="DESELECT")
     bpy.context.view_layer.objects.active = None
+    _schedule_interactive_frame()
     ready = all(item["body"]["ready_for_export"] and
                 all(pattern["pattern"]["ready_for_export"] for pattern in item["patterns"])
                 for item in reports)
@@ -544,6 +572,7 @@ def main():
         # is only the triangulation of the source body.
         bpy.ops.object.select_all(action="DESELECT")
         bpy.context.view_layer.objects.active = None
+        _schedule_interactive_frame()
         body_check = _validate(final)
         topology = job.get("body_topology", {})
         if topology.get("valid") and topology.get("solids") == 1:
