@@ -101,6 +101,28 @@ def _frame_visible_scene():
             space.lens = 50
 
 
+def _frame_with_selection():
+    """Fit the visible scene to the selected CAD/pattern objects in UI mode."""
+    if not _interactive():
+        return
+    import bpy
+    try:
+        if bpy.context.object is not None and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    selected = []
+    for obj in bpy.context.scene.objects:
+        if obj.type == "MESH" and not obj.hide_get() and not obj.hide_viewport:
+            obj.select_set(True)
+            selected.append(obj)
+            continue
+        obj.select_set(False)
+    if not selected:
+        return
+    _frame_selected_viewport()
+
+
 def _frame_selected_viewport():
     """Use Blender's own fit operator when a GUI viewport is available."""
     import bpy
@@ -113,11 +135,23 @@ def _frame_selected_viewport():
         if region is None:
             continue
         try:
+            # Prefer selected geometry, then fallback to all visible geometry so
+            # the framing behavior remains stable even with partially-selectable
+            # CAD imports in non-standard Blender layouts.
             with bpy.context.temp_override(window=bpy.context.window,
                                            screen=bpy.context.screen,
                                            area=area, region=region,
                                            region_data=area.spaces.active.region_3d):
                 bpy.ops.view3d.view_selected(use_all_regions=False)
+            return
+        except RuntimeError:
+            pass
+        try:
+            with bpy.context.temp_override(window=bpy.context.window,
+                                           screen=bpy.context.screen,
+                                           area=area, region=region,
+                                           region_data=area.spaces.active.region_3d):
+                bpy.ops.view3d.view_all()
         except RuntimeError:
             # The stored bounds framing remains valid for unusual Blender UI
             # layouts where the operator has no active region.
@@ -385,6 +419,7 @@ def _build_shared_phase_scene(job):
         assembly.children.link(component_collection)
         reports.append(_build_component(component, job, geometry, component_collection, index))
     _frame_visible_scene()
+    _frame_with_selection()
     bpy.ops.object.select_all(action="DESELECT")
     bpy.context.view_layer.objects.active = None
     ready = all(item["body"]["ready_for_export"] and
@@ -502,6 +537,7 @@ def main():
         final.data.materials.clear()
         final.data.materials.append(body_material)
         _frame_visible_scene()
+        _frame_with_selection()
         # Open in Object Mode without selecting the CAD STL.  Its internal
         # tessellation is intentionally present for export, but showing it in
         # Edit Mode looks like a non-continuous Diamond surface even though it

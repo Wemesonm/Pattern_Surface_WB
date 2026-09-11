@@ -53,13 +53,13 @@ def dimensions(payload, params):
 def _period(payload):
     shared_map_phase = payload.get("shared_map_phase", {}) or {}
     shared_period = shared_map_phase.get("assembly_period")
-    if shared_period is not None and float(shared_period) > 0.0:
-        try:
-            return float(shared_period), float(shared_map_phase.get("origin", [0.0, 0.0])[0])
-        except (TypeError, ValueError):
-            pass
-
     adjustments = payload.get("periodic_adjustments", []) or []
+    if any(int(record.get("axis", -1)) == 0 for record in adjustments):
+        if shared_period is not None and float(shared_period) > 0.0:
+            try:
+                return float(shared_period), float(shared_map_phase.get("origin", [0.0, 0.0])[0])
+            except (TypeError, ValueError):
+                pass
     if len(adjustments) == 1 and int(adjustments[0].get("axis", -1)) == 0:
         return float(adjustments[0]["period"]), float(adjustments[0].get("lower", 0.0))
     return None, None
