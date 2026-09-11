@@ -136,6 +136,50 @@ already owns the map object. These associations organize the document tree and
 identify ownership for consumers without altering the serialized payload or the
 source Body's Part Design history.
 
+`DATA-REQ-016` **In validation** — The oldest stored map for one source Body
+is the persistent phase root. Its lateral origin is centred on that map's
+selected logical region. At creation time, a later same-Body map derives its
+logical phase by following source-BRep adjacency from an existing mapped source
+face to a selected source face. The traversal may cross unselected faces and
+transports orientation plus translation only; curved-seam scale is not carried
+into the new map. The result may register the new map's logical `q` coordinates,
+face transforms, bounds, and existing `grid.origin`, but it must never edit any
+already persisted map. Every map anchors its vertical `grid.origin` at the
+logical row carried by its own physical lower boundary, measured in the Body
+placement. The physical carrier points, source placement, serialized field set,
+and schema remain unchanged. This makes independent Map Faces runs share one
+phase without involving a pattern package. A selected source not contained by
+a PartDesign Body uses its own Shape and Placement as the phase owner. Different
+phase owners may share a phase only when their map carriers have a coincident
+physical boundary; the oldest compatible map is the read-only phase reference.
+
+`DATA-REQ-057` **Implemented** — A transient Blender shared-phase job may
+contain independently serialized Map Faces payloads. Before Blender generation,
+the bridge may apply a rigid logical 2D signed-axis transform (including a
+reflection through the matched rim where both chart interiors occupy its same
+logical side) and translation to
+each non-reference payload so compatible native exterior boundaries share one
+lattice phase. This transformation is job-local: it does not rewrite
+`MapPayloadChunks`, alter source placements, or change any stored map grid.
+Each component retains its own carrier, source-body export and physical clipping.
+
+`DATA-REQ-059` **In validation** — A shared Blender Diamond job may add
+transient `shared_pattern_phase` metadata to each packaged payload. It holds
+the reference Diamond side, row height, and logical origin. This metadata is
+not written to Map Faces; it makes independently mapped, physically adjacent
+components use identical Diamond dimensions. Only the reference component may
+apply its own periodic closure fit. A joint assembly cycle (PAT-REQ-089) may
+instead supply transient `assembly_period` and `assembly_modules` fields. Its
+common side is fitted once for all components, while `modules` remains null:
+partial carriers must not be individually periodicized. Saved maps are unchanged.
+
+`DATA-REQ-058` **In validation** — The Blender bridge may partition one
+multi-Body map payload into one transient payload per source Body. It retains
+only the corresponding face records, carrier triangles, native boundary
+segments, adjacency, components, and periodic records, with face-local indexes
+remapped consistently. This is a job-only representation: no FreeCAD object or
+serialized map payload is edited.
+
 ## Pattern Object and Payload
 
 Generic properties:

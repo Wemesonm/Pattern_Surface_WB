@@ -280,6 +280,121 @@ def _surface_check(obj):
             "passed": intersections == 0 and degenerate == 0}
 
 
+def _link_only(obj, collection):
+    """Place an output in one assembly collection, not Blender's root scene."""
+    collection.objects.link(obj)
+    for owner in list(obj.users_collection):
+        if owner != collection:
+            owner.objects.unlink(obj)
+
+
+def _component_materials():
+    import bpy
+    relief = bpy.data.materials.get("Auzyron Graphite Blue")
+    if relief is None:
+        relief = bpy.data.materials.new("Auzyron Graphite Blue")
+        relief.diffuse_color = (0.11, 0.24, 0.29, 1.0)
+        relief.use_nodes = True
+        shader = relief.node_tree.nodes.get("Principled BSDF")
+        if shader is not None:
+            shader.inputs["Base Color"].default_value = (0.11, 0.24, 0.29, 1.0)
+            shader.inputs["Roughness"].default_value = 0.36
+    body = bpy.data.materials.get("Auzyron CAD Body Gray")
+    if body is None:
+        body = bpy.data.materials.new("Auzyron CAD Body Gray")
+        body.diffuse_color = (0.38, 0.42, 0.45, 1.0)
+        body.use_nodes = True
+        shader = body.node_tree.nodes.get("Principled BSDF")
+        if shader is not None:
+            shader.inputs["Base Color"].default_value = (0.38, 0.42, 0.45, 1.0)
+            shader.inputs["Roughness"].default_value = 0.48
+    return relief, body
+
+
+def _build_component(component, job, geometry, collection, index):
+    """Create one source body and one independently clipped relief per map."""
+    label = str(component.get("body_label") or component.get("map_label") or
+                component.get("map_object") or index)
+    body = _import_stl(component["body_mesh"])
+    _link_only(body, collection)
+    _weld_mesh(body, preserve_winding=True)
+    body.name = "Auzyron CAD Body — {}".format(label)
+    source_copy = body.copy()
+    source_copy.data = body.data.copy()
+    source_copy.name = "Source CAD Body (hidden copy) — {}".format(label)
+    _link_only(source_copy, collection)
+    source_copy.hide_set(True)
+    source_copy.hide_viewport = True
+    source_copy.hide_render = True
+    relief_material, body_material = _component_materials()
+    body.data.materials.clear()
+    body.data.materials.append(body_material)
+    body_check = _validate(body)
+    topology = component.get("body_topology", {})
+    if topology.get("valid") and topology.get("solids") == 1:
+        expected = float(topology["volume_mm3"])
+        error = abs(body_check["volume_mm3"] - expected)
+        body_check["cad_shells"] = int(topology["shells"])
+        body_check["cad_volume_mm3"] = expected
+        body_check["volume_error_mm3"] = error
+        body_check["ready_for_export"] = (
+            body_check["nonmanifold_edges"] == 0 and
+            body_check["connected_components"] == int(topology["shells"]) and
+            expected > 0 and error <= max(0.1, expected * 0.005))
+    maps = component.get("maps") or [component]
+    patterns = []
+    for mapped in maps:
+        map_label = str(mapped.get("map_label") or mapped.get("map_object") or len(patterns) + 1)
+        data = geometry.build(mapped["map_payload"], job["parameters"])
+        relief = _mesh_object("Auzyron Diamond Pattern — {} — {}".format(label, map_label),
+                              data, data["facet_ids"])
+        _link_only(relief, collection)
+        _recalculate_normals(relief)
+        if data.get("weld_relief"):
+            _weld_mesh(relief)
+        supports = mapped["map_payload"].get("boundary_support_planes", [])
+        if supports and data.get("clip_support_planes", True):
+            boundary = _import_geometry(Path(__file__).with_name("boundary_clip.py"))
+            boundary.clip_support_planes(relief, supports, str(job.get("boundary_solver", "EXACT")))
+            if data.get("cleanup_after_clip", True):
+                _clean_planar_union(relief)
+        if data.get("smooth_relief"):
+            _smooth_relief(relief)
+        elif data.get("stats", {}).get("algorithm") != "regular_sampled_facets":
+            _finish_facets(relief)
+        relief.data.materials.clear()
+        relief.data.materials.append(relief_material)
+        patterns.append({"map_object": mapped.get("map_object"), "map_label": map_label,
+                         "pattern": _validate(relief), "geometry": data["stats"]})
+    return {"body_label": label, "source_bodies": component.get("source_bodies", []),
+            "body": body_check, "patterns": patterns}
+
+
+def _build_shared_phase_scene(job):
+    """Create visibly separate assembly components; they are never Boolean-fused."""
+    import bpy
+    if job.get("pattern_mesh"):
+        raise RuntimeError("A shared-phase job cannot use one prebuilt FreeCAD pattern mesh.")
+    geometry = _import_geometry(job["geometry_module"])
+    assembly = bpy.data.collections.new("Auzyron Shared Pattern Assembly")
+    bpy.context.scene.collection.children.link(assembly)
+    reports = []
+    for index, component in enumerate(job["components"], 1):
+        component_collection = bpy.data.collections.new(
+            "Auzyron Component {:02d}".format(index))
+        assembly.children.link(component_collection)
+        reports.append(_build_component(component, job, geometry, component_collection, index))
+    _frame_visible_scene()
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = None
+    ready = all(item["body"]["ready_for_export"] and
+                all(pattern["pattern"]["ready_for_export"] for pattern in item["patterns"])
+                for item in reports)
+    return {"status": "success" if ready else "preview", "mode": "shared_phase_components",
+            "shared_phase": job.get("shared_phase", {}), "components": reports,
+            "ready_for_export": ready}
+
+
 def main():
     import bpy
 
@@ -299,6 +414,13 @@ def main():
         _clear_factory_scene()
         bpy.context.scene.unit_settings.system = "METRIC"
         bpy.context.scene.unit_settings.length_unit = "MILLIMETERS"
+        if job.get("components"):
+            report = _build_shared_phase_scene(job)
+            if _interactive():
+                shutil.rmtree(job_path.parent)
+                return
+            _write_report(report_path, report)
+            return
         data = None
         if job.get("pattern_mesh"):
             # The final pattern was built and clipped by FreeCAD.  Import it

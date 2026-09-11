@@ -39,6 +39,10 @@ class MappingEquivalenceTests(unittest.TestCase):
         self.assertIn("ColumnWidth", parameters.COLUMN_WIDTH_KEY)
         self.assertIn("RowHeight", parameters.ROW_HEIGHT_KEY)
         self.assertIn("ClosureTolerance", parameters.CLOSURE_TOLERANCE_KEY)
+        self.assertIn("PhaseAlignment", parameters.PHASE_ALIGNMENT_KEY)
+        self.assertIn("RowAlignment", parameters.ROW_ALIGNMENT_KEY)
+        self.assertEqual("global", parameters.last_values()["phase_alignment"])
+        self.assertEqual("global", parameters.last_values()["row_alignment"])
 
     def test_generic_grid_contract_is_tool_neutral(self):
         # DATA-REQ-001, MAP-REQ-024: Map Faces dimensions live in a shared

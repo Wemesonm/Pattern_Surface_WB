@@ -213,6 +213,43 @@ def source_solid(entry):
     return implementation(entry)
 
 
+def body_anchored_grid_origin(entries, triangles, fallback):
+    from .mapping.grid_phase import body_anchored_grid_origin as implementation
+    return implementation(entries, triangles, fallback)
+
+
+def body_phase_grid_origin(document, entries, triangles, fallback):
+    from .mapping.grid_phase import body_phase_grid_origin as implementation
+    return implementation(document, entries, triangles, fallback)
+
+
+def grid_origin_for_alignment(document, entries, triangles, bounds,
+                              column_alignment, row_alignment="global"):
+    from .mapping.grid_phase import grid_origin_for_alignment as implementation
+    return implementation(document, entries, triangles, bounds,
+                          column_alignment, row_alignment)
+
+
+def normalize_phase_alignment(value):
+    from .mapping.grid_phase import normalize_phase_alignment as implementation
+    return implementation(value)
+
+
+def normalize_row_alignment(value):
+    from .mapping.grid_phase import normalize_row_alignment as implementation
+    return implementation(value)
+
+
+def align_grid_to_existing_body_map(document, entries, triangles, boundary):
+    from .mapping.grid_phase import align_grid_to_existing_body_map as implementation
+    return implementation(document, entries, triangles, boundary)
+
+
+def register_grid_to_body_phase(document, entries, triangles, boundary):
+    from .mapping.grid_phase import register_grid_to_body_phase as implementation
+    return implementation(document, entries, triangles, boundary)
+
+
 def surface_period(surface, axis):
     from .mapping.parameterization import surface_period as implementation
     return implementation(surface, axis)
@@ -1208,7 +1245,8 @@ def entry_record(entry):
 def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
                 row_height=DEFAULT_MAP_ROW_HEIGHT,
                 closure_tolerance=DEFAULT_MAP_CLOSURE_TOLERANCE,
-                column_count=None, row_count=None):
+                column_count=None, row_count=None, phase_alignment="global",
+                row_alignment="global"):
     doc = App.ActiveDocument
     if doc is None:
         fail("Abra um documento antes de executar Map Faces.")
@@ -1218,6 +1256,8 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
             fail("A quantidade de colunas e linhas deve ser positiva.")
     else:
         validate_map_grid(column_width, row_height, closure_tolerance)
+    phase_alignment = normalize_phase_alignment(phase_alignment)
+    row_alignment = normalize_row_alignment(row_alignment)
     console("map_faces: build={} file={}".format(BUILD_ID, __file__))
     entries = selected_faces()
     for entry in entries:
@@ -1241,6 +1281,10 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
                  for left, right in sorted(seam_pairs)) or "nenhuma"))
     periodic_records = []
     boundary = external_segments(entries, graph, triangles, seam_pairs)
+    aligned_grid_origin = (register_grid_to_body_phase(doc, entries, triangles, boundary)
+                           if phase_alignment == "global" and row_alignment == "global" else None)
+    if aligned_grid_origin is not None:
+        console("map_faces: fase_da_grade_registrada_por_topologia_do_corpo")
     xs = [vertex["q"][0] for tri in triangles for vertex in tri["v"]]
     ys = [vertex["q"][1] for tri in triangles for vertex in tri["v"]]
     bounds = [min(xs), max(xs), min(ys), max(ys)]
@@ -1250,8 +1294,12 @@ def create_wrap(column_width=DEFAULT_MAP_COLUMN_WIDTH,
         column_width = (bounds[1] - bounds[0]) / float(column_count)
         row_height = (bounds[3] - bounds[2]) / float(row_count)
         validate_map_grid(column_width, row_height, closure_tolerance)
-    grid_origin = [(bounds[0] + bounds[1]) * 0.5,
-                   (bounds[2] + bounds[3]) * 0.5]
+    # Local alignment changes only the established origin values. When both
+    # axes follow global phase, a coincident rim can also register the atlas.
+    grid_origin = (aligned_grid_origin if aligned_grid_origin is not None else
+                   grid_origin_for_alignment(
+                       doc, entries, triangles, bounds, phase_alignment,
+                       row_alignment))
     grid = {"column_width": float(column_width),
             "row_height": float(row_height),
             "column_count": int(column_count) if column_count is not None else None,

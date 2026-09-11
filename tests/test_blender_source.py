@@ -107,5 +107,111 @@ class BlenderSourceTests(unittest.TestCase):
     def test_blender_command_uses_the_diamond_dialog_without_requiring_a_result(self):
         from pattern_surface.commands import blender_diamond as command
         source = Path(command.__file__).read_text(encoding='utf-8')
-        self.assertIn('diamond_parameters.get_parameters(mapped, blender=True)', source)
+        self.assertIn('diamond_parameters.get_parameters(mapped[0], blender=True)', source)
         self.assertIn('include_boundary_curves=parameters.get("base_blend", 0.0) > 0.0', source)
+
+    def test_shared_phase_jobs_keep_independent_component_exports(self):
+        source = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/job.py').read_text(encoding='utf-8')
+        worker = (Path(__file__).parents[1] / 'pattern_surface/blender_bridge/worker.py').read_text(encoding='utf-8')
+        self.assertIn('job["components"] = components', source)
+        self.assertIn('"shared_phase"', source)
+        self.assertIn('components_by_sources', source)
+        self.assertIn('"maps": [{key: value', source)
+        self.assertIn('Auzyron Shared Pattern Assembly', worker)
+        self.assertIn('Auzyron CAD Body — {}', worker)
+        self.assertIn('"patterns": patterns', worker)
+
+class MultiBodyMapBridgeTests(unittest.TestCase):
+    """PAT-REQ-087/DATA-REQ-058 transient multi-body map partitioning."""
+
+    class _Shape:
+        Solids = [object()]
+        def isNull(self):
+            return False
+
+    class _Body:
+        TypeId = 'PartDesign::Body'
+        def __init__(self, name):
+            self.Name = name
+            self.Label = name
+            self.Shape = MultiBodyMapBridgeTests._Shape()
+
+    class _Feature:
+        def __init__(self, name, body):
+            self.Name = name
+            self._body = body
+        def getParentGeoFeatureGroup(self):
+            return self._body
+
+    class _Document:
+        def __init__(self, objects):
+            self._objects = {obj.Name: obj for obj in objects}
+        def getObject(self, name):
+            return self._objects.get(name)
+
+    @staticmethod
+    def _payload():
+        point = lambda x, y: {'p': [x, y, 0], 'q': [x, y], 'n': [0, 0, 1]}
+        a, b, c = point(0, 0), point(10, 0), point(0, 10)
+        d, e, f = point(12, 0), point(22, 0), point(12, 10)
+        return {
+            'faces': [
+                {'index': 10, 'object': 'FeatureA', 'sub': 'Face1'},
+                {'index': 20, 'object': 'FeatureB', 'sub': 'Face1'},
+            ],
+            'carrier_triangles': [
+                {'face': 10, 'component': 0, 'v': [a, b, c]},
+                {'face': 20, 'component': 1, 'v': [d, e, f]},
+            ],
+            'external_segments': [
+                {'face': 10, 'component': 0, 'a': a, 'b': b},
+                {'face': 20, 'component': 1, 'a': d, 'b': e},
+            ],
+            'adjacency': [], 'periodic_seams': [],
+            'components': [[10], [20]],
+            'periodic_adjustments': [{'component': 1, 'axis': 0, 'lower': 12}],
+            'grid': {'origin': [0, 0]},
+        }
+
+    def test_one_multibody_map_becomes_one_transient_payload_per_body(self):
+        from pattern_surface.blender_bridge.job import _payloads_by_source_body
+        body_a, body_b = self._Body('BodyA'), self._Body('BodyB')
+        doc = self._Document([self._Feature('FeatureA', body_a),
+                              self._Feature('FeatureB', body_b)])
+        original = self._payload()
+        split = _payloads_by_source_body(doc, original)
+        self.assertEqual(['BodyA', 'BodyB'], [owner for owner, _payload in split])
+        self.assertEqual([10, 20], [face['index'] for face in original['faces']])
+        for owner, payload in split:
+            self.assertEqual([0], [face['index'] for face in payload['faces']])
+            self.assertEqual([0], [triangle['face'] for triangle in payload['carrier_triangles']])
+            self.assertEqual([0], [segment['face'] for segment in payload['external_segments']])
+            self.assertEqual([[0]], payload['components'])
+            self.assertEqual([0], [triangle['component'] for triangle in payload['carrier_triangles']])
+        self.assertEqual([], split[0][1]['periodic_adjustments'])
+        self.assertEqual([0], [row['component'] for row in split[1][1]['periodic_adjustments']])
+
+    def test_multibody_map_job_exports_two_movable_components(self):
+        """PAT-REQ-087: one map selection must never fuse movable Bodies."""
+        import base64
+        import json
+        import zlib
+        from pattern_surface.blender_bridge import job
+
+        body_a, body_b = self._Body('BodyA'), self._Body('BodyB')
+        feature_a, feature_b = self._Feature('FeatureA', body_a), self._Feature('FeatureB', body_b)
+        doc = self._Document([feature_a, feature_b])
+        doc.Name = 'TransientAssembly'
+        payload = self._payload()
+        packed = base64.b64encode(zlib.compress(json.dumps(payload).encode('utf-8'))).decode('ascii')
+        mapped = SimpleNamespace(Name='MappedSurface', Label='Mapped Surface', Document=doc,
+                                 PropertiesList=['MapPayloadChunks'], MapPayloadChunks=[packed])
+        with TemporaryDirectory() as temporary, \
+             patch('pattern_surface.blender_bridge.reference.prepare_reference', side_effect=lambda _doc, item, **_kw: item), \
+             patch('pattern_surface.blender_bridge.shared_phase.align', side_effect=lambda rows: (rows, [{'reference': 0}, {'reference': 0}])), \
+             patch('pattern_surface.blender_bridge.job._export_clean_shape', return_value={'valid': True}):
+            job_path = job.create_job(mapped, {'module_width': 10}, root=temporary)
+            data = json.loads(job_path.read_text(encoding='utf-8'))
+        self.assertEqual(2, len(data['components']))
+        self.assertEqual([['BodyA'], ['BodyB']], [component['source_bodies'] for component in data['components']])
+        self.assertEqual([1, 1], [len(component['maps']) for component in data['components']])

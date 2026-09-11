@@ -155,18 +155,148 @@ def worker_path():
     return Path(__file__).with_name("worker.py")
 
 
-def create_job(map_object, parameters, root=None, pattern_object=None,
-               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT",
-               include_boundary_curves=False):
-    """Export the source body and map data into a transient Blender job."""
-
-    map_object = resolve_map(map_object)
-    if map_object is None:
+def _map_objects(selection):
+    """Resolve a selection into unique Map Faces runs in selection order."""
+    objects = selection if isinstance(selection, (list, tuple)) else [selection]
+    result = []
+    seen = set()
+    for selected in objects:
+        mapped = resolve_map(selected)
+        if mapped is None:
+            raise ValueError("Select only Mapped Surfaces or Mapping Grids.")
+        key = getattr(mapped, "Name", id(mapped))
+        if key not in seen:
+            seen.add(key)
+            result.append(mapped)
+    if not result:
         raise ValueError("Select a Mapped Surface or Mapping Grid first.")
-    document = map_object.Document
-    payload = _payload(map_object)
-    from .reference import prepare_reference
-    payload = prepare_reference(document, payload, include_boundary_curves=include_boundary_curves)
+    return result
+
+
+def _copy_payload_for_body(document, payload, owner_name):
+    """Return one transient map payload containing one source Body only.
+
+    Map Faces deliberately permits an arbitrary multi-Body selection. Blender
+    must still preserve motion between Bodies, so this bridge-only split keeps
+    their carriers and CAD exports separate without editing the saved map.
+    """
+    import copy
+
+    records = list(payload.get("faces", []) or [])
+    selected = []
+    for position, record in enumerate(records):
+        source = document.getObject(record.get("object", ""))
+        if source is not None and _solid_owner(source).Name == owner_name:
+            # Carrier records address the public face index, which need not
+            # equal the position in a legacy payload's face list.
+            selected.append((int(record.get("index", position)), record))
+    if not selected:
+        return None
+    remap = {old: new for new, (old, _record) in enumerate(selected)}
+    result = copy.deepcopy(payload)
+    result["faces"] = []
+    for new_index, (_old_index, record) in enumerate(selected):
+        clone = copy.deepcopy(record)
+        clone["index"] = new_index
+        result["faces"].append(clone)
+
+    old_components = list(payload.get("components", []) or [])
+    component_remap = {}
+    components = []
+    for old_component, component in enumerate(old_components):
+        members = [remap[index] for index in component if index in remap]
+        if members:
+            component_remap[old_component] = len(components)
+            components.append(members)
+    if not components:
+        components = [list(range(len(selected)))]
+        component_remap = {0: 0}
+    result["components"] = components
+
+    def belongs(record):
+        return int(record.get("face", -1)) in remap
+
+    def remapped(records_to_copy):
+        copied = []
+        for record in records_to_copy or []:
+            if not belongs(record):
+                continue
+            clone = copy.deepcopy(record)
+            clone["face"] = remap[int(record["face"])]
+            old_component = int(clone.get("component", 0))
+            clone["component"] = component_remap.get(old_component, 0)
+            copied.append(clone)
+        return copied
+
+    carrier = remapped(payload.get("carrier_triangles", payload.get("triangles", [])))
+    result["carrier_triangles"] = carrier
+    result["triangles"] = carrier
+    result["external_segments"] = remapped(payload.get("external_segments", []))
+    result["adjacency"] = [[remap[left], remap[right]]
+                           for left, right in payload.get("adjacency", []) or []
+                           if left in remap and right in remap]
+    result["periodic_seams"] = [[remap[left], remap[right]]
+                                for left, right in payload.get("periodic_seams", []) or []
+                                if left in remap and right in remap]
+    result["periodic_adjustments"] = [
+        dict(copy.deepcopy(record), component=component_remap[int(record.get("component", 0))])
+        for record in payload.get("periodic_adjustments", []) or []
+        if int(record.get("component", 0)) in component_remap]
+    qs = [vertex["q"] for triangle in carrier for vertex in triangle.get("v", [])]
+    if qs:
+        result["bounds"] = [min(q[0] for q in qs), max(q[0] for q in qs),
+                            min(q[1] for q in qs), max(q[1] for q in qs)]
+    return result
+
+def _payloads_by_source_body(document, payload):
+    """Partition a map only when it really spans separate movable Bodies."""
+    owners = []
+    for record in payload.get("faces", []) or []:
+        source = document.getObject(record.get("object", ""))
+        if source is None:
+            raise ValueError("Map source object is missing: {}. Recreate Map Faces from the current document.".format(
+                record.get("object", "")))
+        owner = _solid_owner(source)
+        if owner.Name not in owners:
+            owners.append(owner.Name)
+    if len(owners) <= 1:
+        return [(owners[0] if owners else None, payload)]
+    return [(owner, _copy_payload_for_body(document, payload, owner))
+            for owner in owners]
+
+
+def _apply_shared_diamond_phase(payloads, parameters):
+    """Attach one transient Diamond lattice to every shared job payload.
+
+    The Map Faces grid remains untouched and map-local. Only the Blender job
+    receives the reference pattern dimensions, preventing each periodic
+    component from independently changing the requested Diamond side.
+    """
+    if not payloads:
+        return
+    from .geometry_closed import dimensions
+    reference = dimensions(payloads[0], parameters)
+    phase = {"side": float(reference["side"]),
+             "row_height": float(reference["row_height"]),
+             "origin": [float(value) for value in reference["origin"][:2]],
+             "modules": reference.get("modules")}
+    from .shared_phase import assembly_cycle_period
+    period = assembly_cycle_period(payloads)
+    if period is not None:
+        import math
+        requested = float(parameters.get('diamond_side') or
+                          2.0 * float(parameters.get('diamond_height', 12.32)) / math.sqrt(3.0))
+        modules = max(1, round(period / requested))
+        side = period / modules
+        if abs(side - requested) > float(parameters.get('closure_fit_tolerance', 0.2)) + 1.0e-8:
+            raise ValueError('Assembly Diamond closure exceeds the configured tolerance.')
+        phase.update(side=side, modules=None, assembly_period=period,
+                     assembly_modules=modules)
+    for index, payload in enumerate(payloads):
+        payload["shared_pattern_phase"] = dict(phase, reference=(index == 0))
+
+
+def _sources_for_map(document, payload):
     records = payload.get("faces", [])
     objects = []
     seen = set()
@@ -175,34 +305,99 @@ def create_job(map_object, parameters, root=None, pattern_object=None,
         source = document.getObject(object_name) if object_name else None
         if source is None:
             raise ValueError("Map source object is missing: {}. Recreate Map Faces from the current document.".format(object_name))
-        if source is not None:
-            source = _solid_owner(source)
-            if source.Name not in seen:
-                seen.add(source.Name)
-                objects.append(source)
+        source = _solid_owner(source)
+        if source.Name not in seen:
+            seen.add(source.Name)
+            objects.append(source)
     if not objects:
         raise ValueError("The map does not reference a source CAD body.")
+    return objects
+
+
+def create_job(map_object, parameters, root=None, pattern_object=None,
+               geometry_module=None, pattern_label="Diamond", boundary_solver="EXACT",
+               include_boundary_curves=False):
+    """Export the source body and map data into a transient Blender job."""
+
+    map_objects = _map_objects(map_object)
+    document = map_objects[0].Document
+    if any(item.Document is not document for item in map_objects):
+        raise ValueError("All selected maps must belong to the active FreeCAD document.")
+    from .reference import prepare_reference
+    # A single Map Faces run can contain faces of several movable Bodies.
+    # Split that saved contract only in this transient job before refreshing
+    # curved carriers, so every result remains physically independent.
+    payloads = []
+    payload_sources = []
+    for item in map_objects:
+        for owner_name, payload in _payloads_by_source_body(document, _payload(item)):
+            payloads.append(prepare_reference(
+                document, payload, include_boundary_curves=include_boundary_curves))
+            payload_sources.append((item, owner_name))
 
     root = job_root(root)
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="auzyron-", dir=str(root)))
-    body_path = directory / "source_body.stl"
-    body_topology = _export_clean_shape(document, objects, body_path)
+    maps = []
+    for (mapped, owner_name), payload in zip(payload_sources, payloads):
+        sources = _sources_for_map(document, payload)
+        label = getattr(mapped, "Label", mapped.Name)
+        if owner_name is not None and len(payload_sources) > len(map_objects):
+            label = "{} — {}".format(label, owner_name)
+        maps.append({
+            "map_object": mapped.Name,
+            "map_label": label,
+            "map_payload": payload,
+            "sources": sources,
+        })
+    phase_records = []
+    if len(maps) > 1:
+        from .shared_phase import align
+        aligned, phase_records = align([item["map_payload"] for item in maps])
+        if str(pattern_label).strip().lower() == "diamond":
+            _apply_shared_diamond_phase(aligned, parameters)
+        for mapped, payload in zip(maps, aligned):
+            mapped["map_payload"] = payload
+    # Several maps can refer to separate exterior regions of one Body. Export
+    # that Body once; only a different source-body set creates another Blender
+    # CAD object.  Pattern patches remain independently clipped to their maps.
+    components_by_sources = {}
+    for mapped in maps:
+        key = tuple(source.Name for source in mapped["sources"])
+        components_by_sources.setdefault(key, []).append(mapped)
+    components = []
+    for index, (key, component_maps) in enumerate(components_by_sources.items(), 1):
+        sources = component_maps[0]["sources"]
+        body_path = directory / "source_body_{:03d}.stl".format(index)
+        components.append({
+            "body_label": getattr(sources[0], "Label", sources[0].Name),
+            "body_mesh": str(body_path),
+            "body_topology": _export_clean_shape(document, sources, body_path),
+            "source_bodies": list(key),
+            "maps": [{key: value for key, value in mapped.items() if key != "sources"}
+                     for mapped in component_maps],
+        })
+    first_map = maps[0]
+    first_component = components[0]
     job = {
         "format": JOB_SCHEMA,
         "version": JOB_VERSION,
         "units": "mm",
-        "source": {"document": document.Name, "map_object": map_object.Name,
-                   "map_label": getattr(map_object, "Label", map_object.Name)},
-        "map_payload": payload,
-        "body_mesh": str(body_path),
-        "body_topology": body_topology,
+        "source": {"document": document.Name, "map_object": first_map["map_object"],
+                   "map_label": first_map["map_label"]},
+        "map_payload": first_map["map_payload"],
+        "body_mesh": first_component["body_mesh"],
+        "body_topology": first_component["body_topology"],
         "parameters": dict(parameters),
         "geometry_module": str(geometry_module or Path(__file__).with_name("geometry_closed.py")),
         "pattern_label": str(pattern_label),
         "boundary_solver": str(boundary_solver),
         "output_dir": str(directory),
     }
+    if len(maps) > 1:
+        job["components"] = components
+        job["shared_phase"] = {"reference_map": first_map["map_object"],
+                               "alignments": phase_records}
     # An optional final pattern is supported for future export-only workflows,
     # but Blender Diamond intentionally generates its relief from the map.
     if pattern_object is not None:
